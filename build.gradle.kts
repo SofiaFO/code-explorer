@@ -30,4 +30,12 @@ tasks {
         sourceCompatibility = "17"
         targetCompatibility = "17"
     }
+
+    test {
+        jvmArgs(
+            "-Djava.awt.headless=true",
+            "-Dsun.java2d.uiScale=1.0",
+            "-Dide.ui.scale.mode=hide",
+        )
+    }
 }

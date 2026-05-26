@@ -15,6 +15,13 @@ out/
 !.mvn/wrapper/maven-wrapper.jar
 !.mvn/wrapper/maven-wrapper.properties
 
+# Gradle
+.gradle/
+build/
+gradle/
+gradlew
+gradlew.bat
+
 # OS
 .DS_Store
 Thumbs.db

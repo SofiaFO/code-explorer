@@ -1,9 +1,11 @@
 package com.sofia.codeexplorer.analyzer;
 
+import com.intellij.ide.highlighter.JavaFileType;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
+import com.intellij.psi.search.FileTypeIndex;
 import com.intellij.psi.search.GlobalSearchScope;
-import com.intellij.psi.search.PsiShortNamesCache;
 import com.sofia.codeexplorer.model.ClassNode;
 import com.sofia.codeexplorer.model.DependencyEdge;
 import com.sofia.codeexplorer.model.EdgeType;
@@ -24,13 +26,16 @@ public class ClassRelationExtractor {
         Map<String, ClassNode> nodes = new LinkedHashMap<>();
         List<DependencyEdge>   edges = new ArrayList<>();
 
-        GlobalSearchScope scope  = GlobalSearchScope.projectScope(project);
-        JavaPsiFacade     facade = JavaPsiFacade.getInstance(project);
-        String[]          names  = PsiShortNamesCache.getInstance(project).getAllClassNames();
+        GlobalSearchScope scope      = GlobalSearchScope.projectScope(project);
+        PsiManager        psiManager = PsiManager.getInstance(project);
 
-        for (String name : names) {
-            PsiClass[] classes = facade.findClasses(name, scope);
-            for (PsiClass psiClass : classes) {
+        Collection<VirtualFile> javaFiles = FileTypeIndex.getFiles(JavaFileType.INSTANCE, scope);
+
+        for (VirtualFile vf : javaFiles) {
+            PsiFile psiFile = psiManager.findFile(vf);
+            if (!(psiFile instanceof PsiJavaFile)) continue;
+
+            for (PsiClass psiClass : ((PsiJavaFile) psiFile).getClasses()) {
                 processClass(psiClass, nodes, edges);
             }
         }
@@ -46,7 +51,6 @@ public class ClassRelationExtractor {
         String qualifiedName = psiClass.getQualifiedName();
         if (qualifiedName == null) return;
 
-        // Determina o tipo do nó
         NodeType nodeType;
         if (psiClass.isInterface()) {
             nodeType = NodeType.INTERFACE;
@@ -115,8 +119,7 @@ public class ClassRelationExtractor {
     }
 
     private void calculateMetrics(Map<String, ClassNode> nodes, List<DependencyEdge> edges) {
-        // fan-out: dependências que SAEM desta classe
-        Map<String, Long> fanOutMap = edges.stream()
+        Map<String, Integer> fanOutMap = edges.stream()
                 .collect(Collectors.groupingBy(
                         DependencyEdge::getSource,
                         Collectors.collectingAndThen(
@@ -125,8 +128,7 @@ public class ClassRelationExtractor {
                         )
                 ));
 
-        // fan-in: classes que APONTAM para esta
-        Map<String, Long> fanInMap = edges.stream()
+        Map<String, Integer> fanInMap = edges.stream()
                 .collect(Collectors.groupingBy(
                         DependencyEdge::getTarget,
                         Collectors.collectingAndThen(
@@ -136,12 +138,11 @@ public class ClassRelationExtractor {
                 ));
 
         nodes.forEach((name, node) -> {
-            node.setFanOut(fanOutMap.getOrDefault(name, 0L).intValue());
-            node.setFanIn(fanInMap.getOrDefault(name, 0L).intValue());
+            node.setFanOut(fanOutMap.getOrDefault(name, 0));
+            node.setFanIn(fanInMap.getOrDefault(name, 0));
         });
     }
 
-    // Classe simples para retornar os dois resultados juntos
     public static class ExtractionResult {
         public final List<ClassNode>      nodes;
         public final List<DependencyEdge> edges;

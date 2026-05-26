@@ -1,10 +1,14 @@
 package com.sofia.codeexplorer.ui;
 
+import com.intellij.openapi.application.ModalityState;
+import com.intellij.openapi.application.ReadAction;
+import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowFactory;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.components.JBTextArea;
+import com.intellij.util.concurrency.AppExecutorUtil;
 import com.sofia.codeexplorer.analyzer.ClassRelationExtractor;
 import com.sofia.codeexplorer.model.ClassNode;
 import com.sofia.codeexplorer.model.DependencyEdge;
@@ -17,7 +21,6 @@ import java.util.List;
 
 public class CodeExplorerToolWindowFactory implements ToolWindowFactory {
 
-    // Referência estática para permitir que a Action dispare a análise
     private static JBTextArea outputArea;
     private static Project currentProject;
 
@@ -28,11 +31,9 @@ public class CodeExplorerToolWindowFactory implements ToolWindowFactory {
 
         JPanel panel = new JPanel(new BorderLayout());
 
-        // Botão de análise
         JButton analyzeButton = new JButton("Analisar projeto");
         analyzeButton.addActionListener(e -> runAnalysis(project));
 
-        // Área de texto com resultado
         outputArea = new JBTextArea();
         outputArea.setEditable(false);
         outputArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
@@ -47,7 +48,6 @@ public class CodeExplorerToolWindowFactory implements ToolWindowFactory {
         toolWindow.getContentManager().addContent(content);
     }
 
-    // Chamado tanto pelo botão quanto pela Action do menu
     public static void triggerAnalysis(Project project) {
         currentProject = project;
         runAnalysis(project);
@@ -55,45 +55,49 @@ public class CodeExplorerToolWindowFactory implements ToolWindowFactory {
 
     private static void runAnalysis(Project project) {
         if (outputArea == null) return;
-        outputArea.setText("Analisando...\n");
 
-        // Roda em background para não travar a UI
-        com.intellij.openapi.application.ApplicationManager.getApplication()
-                .executeOnPooledThread(() -> {
+        outputArea.setText(DumbService.isDumb(project)
+                ? "Aguardando indexação do projeto...\n"
+                : "Analisando...\n");
+
+        ReadAction.nonBlocking(() -> {
                     ClassRelationExtractor extractor = new ClassRelationExtractor(project);
-                    ClassRelationExtractor.ExtractionResult result = extractor.extract();
-
-                    String text = buildOutput(result.nodes, result.edges);
-
-                    // Atualiza a UI na thread correta
-                    SwingUtilities.invokeLater(() -> outputArea.setText(text));
-                });
+                    return extractor.extract();
+                })
+                .inSmartMode(project)
+                .finishOnUiThread(ModalityState.defaultModalityState(),
+                        result -> outputArea.setText(buildOutput(result.nodes, result.edges)))
+                .submit(AppExecutorUtil.getAppExecutorService());
     }
 
-    private static String buildOutput(List<ClassNode> nodes,
-                                      List<DependencyEdge> edges) {
-        StringBuilder sb = new StringBuilder();
+    private static String buildOutput(List<ClassNode> nodes, List<DependencyEdge> edges) {
+        if (nodes.isEmpty()) {
+            return "Nenhuma classe encontrada.\n\n" +
+                   "Verifique se:\n" +
+                   "  - O projeto aberto possui arquivos .java\n" +
+                   "  - O SDK Java está configurado (File → Project Structure → SDK)\n" +
+                   "  - A indexação terminou antes de clicar em Analisar";
+        }
 
+        StringBuilder sb = new StringBuilder();
         sb.append("=== Classes encontradas: ").append(nodes.size()).append(" ===\n\n");
 
         nodes.stream()
                 .sorted(Comparator.comparingInt(ClassNode::getFanIn).reversed())
                 .limit(30)
-                .forEach(node -> {
-                    sb.append(node.getSimpleName())
-                            .append("  [").append(node.getType()).append("]")
-                            .append("  fan-in: ").append(node.getFanIn())
-                            .append("  fan-out: ").append(node.getFanOut())
-                            .append("\n");
-                });
+                .forEach(node -> sb.append(node.getSimpleName())
+                        .append("  [").append(node.getType()).append("]")
+                        .append("  fan-in: ").append(node.getFanIn())
+                        .append("  fan-out: ").append(node.getFanOut())
+                        .append("\n"));
 
         sb.append("\n=== Relações: ").append(edges.size()).append(" ===\n\n");
 
-        edges.stream().limit(50).forEach(edge -> {
-            String src = simpleName(edge.getSource());
-            String tgt = simpleName(edge.getTarget());
-            sb.append(src).append(" --[").append(edge.getType()).append("]--> ").append(tgt).append("\n");
-        });
+        edges.stream().limit(50).forEach(edge -> sb
+                .append(simpleName(edge.getSource()))
+                .append(" --[").append(edge.getType()).append("]--> ")
+                .append(simpleName(edge.getTarget()))
+                .append("\n"));
 
         return sb.toString();
     }
