@@ -1,22 +1,29 @@
-<!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
     <id>com.github.sofiafo.codeexplorer</id>
-    <name>code-explorer</name>
-    <vendor>sofiafo</vendor>
+    <name>CodeExplorer</name>
+    <vendor>Sofia</vendor>
     <description><![CDATA[
-        <p><b>code-explorer</b> is a repository that provides a pure template to make it easier to create a new plugin project.</p>
-        <p>The main goal of this template is to speed up the setup phase of plugin development for both new and experienced developers by preconfiguring the project scaffold and CI, linking to the proper documentation pages, and keeping everything organized.</p>
+        Analisa a estrutura interna de projetos Java e visualiza relações entre classes,
+        interfaces e componentes diretamente dentro do IntelliJ IDEA.
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
-
-    <resource-bundle>messages.MyBundle</resource-bundle>
+    <depends>com.intellij.modules.java</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow
-                id="Class Analyzer"
+                id="CodeExplorer"
                 secondary="false"
                 anchor="right"
-                factoryClass="com.seu.plugin.ui.GraphToolWindowFactory"/>
+                factoryClass="com.sofia.codeexplorer.ui.CodeExplorerToolWindowFactory"/>
     </extensions>
+
+    <actions>
+        <action
+                id="com.sofia.codeexplorer.AnalyzeAction"
+                class="com.sofia.codeexplorer.actions.AnalyzeProjectAction"
+                text="Analyze Project Dependencies">
+            <add-to-group group-id="AnalyzeMenu" anchor="last"/>
+        </action>
+    </actions>
 </idea-plugin>

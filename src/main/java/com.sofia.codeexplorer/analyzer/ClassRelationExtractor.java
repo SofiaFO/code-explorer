@@ -46,7 +46,6 @@ public class ClassRelationExtractor {
         String qualifiedName = psiClass.getQualifiedName();
         if (qualifiedName == null) return;
 
-        // Determina o tipo do nó
         NodeType nodeType;
         if (psiClass.isInterface()) {
             nodeType = NodeType.INTERFACE;
@@ -63,9 +62,15 @@ public class ClassRelationExtractor {
                 .map(v -> v.getPath())
                 .orElse("");
 
+        String packageName = "";
+        if (psiClass.getContainingFile() instanceof PsiJavaFile) {
+            packageName = ((PsiJavaFile) psiClass.getContainingFile()).getPackageName();
+        }
+
         nodes.put(qualifiedName, new ClassNode(
                 qualifiedName,
                 psiClass.getName() != null ? psiClass.getName() : qualifiedName,
+                packageName,
                 nodeType,
                 filePath
         ));
@@ -94,8 +99,29 @@ public class ClassRelationExtractor {
             }
         }
 
-        // 4. Instanciações dentro de métodos (new Foo())
+        // 4. Métodos: parâmetros, retorno, instanciações e chamadas
         for (PsiMethod method : psiClass.getMethods()) {
+
+            // 4a. Parâmetros
+            for (PsiParameter param : method.getParameterList().getParameters()) {
+                if (param.getType() instanceof PsiClassType) {
+                    PsiClass paramClass = ((PsiClassType) param.getType()).resolve();
+                    if (paramClass != null && paramClass.getQualifiedName() != null) {
+                        edges.add(new DependencyEdge(qualifiedName, paramClass.getQualifiedName(), EdgeType.USES));
+                    }
+                }
+            }
+
+            // 4b. Tipo de retorno
+            PsiType returnType = method.getReturnType();
+            if (returnType instanceof PsiClassType) {
+                PsiClass returnClass = ((PsiClassType) returnType).resolve();
+                if (returnClass != null && returnClass.getQualifiedName() != null) {
+                    edges.add(new DependencyEdge(qualifiedName, returnClass.getQualifiedName(), EdgeType.USES));
+                }
+            }
+
+            // 4c. Corpo: instanciações (new Foo()) e chamadas (obj.metodo())
             if (method.getBody() == null) continue;
             method.getBody().accept(new JavaRecursiveElementVisitor() {
                 @Override
@@ -110,38 +136,84 @@ public class ClassRelationExtractor {
                         }
                     }
                 }
+
+                @Override
+                public void visitMethodCallExpression(PsiMethodCallExpression expression) {
+                    super.visitMethodCallExpression(expression);
+                    PsiExpression qualifier = expression.getMethodExpression().getQualifierExpression();
+                    if (qualifier == null) return;
+                    PsiType type = qualifier.getType();
+                    if (type instanceof PsiClassType) {
+                        PsiClass calledClass = ((PsiClassType) type).resolve();
+                        if (calledClass != null && calledClass.getQualifiedName() != null) {
+                            edges.add(new DependencyEdge(qualifiedName, calledClass.getQualifiedName(), EdgeType.CALLS));
+                        }
+                    }
+                }
             });
         }
     }
 
     private void calculateMetrics(Map<String, ClassNode> nodes, List<DependencyEdge> edges) {
-        // fan-out: dependências que SAEM desta classe
         Map<String, Long> fanOutMap = edges.stream()
                 .collect(Collectors.groupingBy(
                         DependencyEdge::getSource,
                         Collectors.collectingAndThen(
                                 Collectors.mapping(DependencyEdge::getTarget, Collectors.toSet()),
-                                Set::size
+                                set -> (long) set.size()
                         )
                 ));
 
-        // fan-in: classes que APONTAM para esta
         Map<String, Long> fanInMap = edges.stream()
                 .collect(Collectors.groupingBy(
                         DependencyEdge::getTarget,
                         Collectors.collectingAndThen(
                                 Collectors.mapping(DependencyEdge::getSource, Collectors.toSet()),
-                                Set::size
+                                set -> (long) set.size()
                         )
                 ));
 
+        // NOC: filhos diretos por herança
+        Map<String, Long> nocMap = edges.stream()
+                .filter(e -> e.getType() == EdgeType.EXTENDS)
+                .collect(Collectors.groupingBy(DependencyEdge::getTarget, Collectors.counting()));
+
+        // Implementações de interface
+        Map<String, Long> implMap = edges.stream()
+                .filter(e -> e.getType() == EdgeType.IMPLEMENTS)
+                .collect(Collectors.groupingBy(DependencyEdge::getTarget, Collectors.counting()));
+
+        // Mapa pai→filho para calcular DIT
+        Map<String, String> parentMap = new HashMap<>();
+        for (DependencyEdge edge : edges) {
+            if (edge.getType() == EdgeType.EXTENDS) {
+                parentMap.put(edge.getSource(), edge.getTarget());
+            }
+        }
+
         nodes.forEach((name, node) -> {
-            node.setFanOut(fanOutMap.getOrDefault(name, 0L).intValue());
-            node.setFanIn(fanInMap.getOrDefault(name, 0L).intValue());
+            int fanOut = fanOutMap.getOrDefault(name, 0L).intValue();
+            int fanIn  = fanInMap.getOrDefault(name, 0L).intValue();
+            node.setFanOut(fanOut);
+            node.setFanIn(fanIn);
+            node.setNoc(nocMap.getOrDefault(name, 0L).intValue());
+            node.setImplementationsCount(implMap.getOrDefault(name, 0L).intValue());
+
+            double instability = (fanIn + fanOut) == 0 ? 0.0 : (double) fanOut / (fanIn + fanOut);
+            node.setInstability(instability);
+
+            // DIT: conta saltos até a raiz da hierarquia de herança
+            int dit = 0;
+            String current = name;
+            Set<String> seen = new HashSet<>();
+            while (parentMap.containsKey(current) && seen.add(current)) {
+                current = parentMap.get(current);
+                dit++;
+            }
+            node.setDit(dit);
         });
     }
 
-    // Classe simples para retornar os dois resultados juntos
     public static class ExtractionResult {
         public final List<ClassNode>      nodes;
         public final List<DependencyEdge> edges;
