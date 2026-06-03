@@ -1,14 +1,14 @@
-<!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
     <id>com.github.sofiafo.codeexplorer</id>
-    <name>Code Explorer</name>
-    <vendor>sofiafo</vendor>
+    <name>CodeExplorer</name>
+    <vendor>Sofia</vendor>
     <description><![CDATA[
-        <p><b>Code Explorer</b> analisa as relações entre classes do projeto e exibe métricas de fan-in e fan-out.</p>
+        Analisa a estrutura interna de projetos Java e visualiza relações entre classes,
+        interfaces e componentes diretamente dentro do IntelliJ IDEA.
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
-    <depends>com.intellij.java</depends>
+    <depends>com.intellij.modules.java</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow
@@ -19,11 +19,11 @@
     </extensions>
 
     <actions>
-        <action id="com.sofia.codeexplorer.actions.AnalyzeProjectAction"
+        <action
+                id="com.sofia.codeexplorer.AnalyzeAction"
                 class="com.sofia.codeexplorer.actions.AnalyzeProjectAction"
-                text="Analisar Projeto (Code Explorer)"
-                description="Analisa dependências entre classes do projeto">
-            <add-to-group group-id="ToolsMenu" anchor="last"/>
+                text="Analyze Project Dependencies">
+            <add-to-group group-id="AnalyzeMenu" anchor="last"/>
         </action>
     </actions>
 </idea-plugin>

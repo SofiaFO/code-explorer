@@ -1,8 +1,15 @@
 # Compilados
-target/
 out/
 *.class
-*.jar
+
+# Gradle
+.gradle/
+gradle-app.setting
+!gradle-wrapper.jar
+!gradle-wrapper.properties
+
+# Build
+build/
 
 # IntelliJ IDEA
 .idea/
@@ -10,7 +17,10 @@ out/
 *.iws
 *.ipr
 
-# Maven
+# IntelliJ Platform Plugin SDK (sandbox, jars de runtime)
+.intellijPlatform/
+
+# Maven (mantido por compatibilidade)
 .mvn/
 !.mvn/wrapper/maven-wrapper.jar
 !.mvn/wrapper/maven-wrapper.properties

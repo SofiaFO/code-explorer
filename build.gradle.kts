@@ -1,9 +1,6 @@
-import org.jetbrains.intellij.platform.gradle.TestFrameworkType
-
 plugins {
-    id("org.jetbrains.kotlin.jvm")
+    id("java")
     id("org.jetbrains.intellij.platform")
-    id("org.jetbrains.changelog")
 }
 
 repositories {
@@ -17,25 +14,17 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
 
     intellijPlatform {
-        intellijIdeaUltimate("2025.1")   // ajusta para a versão que você tem instalada
-        testFramework(TestFrameworkType.Platform)
-
-        // habilita as classes PSI do Java (JavaPsiFacade, PsiShortNamesCache etc.)
+        local("C:/Program Files/JetBrains/IntelliJ IDEA 2026.1.1")
         bundledPlugin("com.intellij.java")
     }
 }
 
 tasks {
+    instrumentCode {
+        enabled = false
+    }
     withType<JavaCompile> {
         sourceCompatibility = "17"
         targetCompatibility = "17"
-    }
-
-    test {
-        jvmArgs(
-            "-Djava.awt.headless=true",
-            "-Dsun.java2d.uiScale=1.0",
-            "-Dide.ui.scale.mode=hide",
-        )
     }
 }
