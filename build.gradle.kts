@@ -14,8 +14,9 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
 
     intellijPlatform {
-        local("C:/Program Files/JetBrains/IntelliJ IDEA 2026.1.1")
+        local("/snap/intellij-idea-ultimate/current")
         bundledPlugin("com.intellij.java")
+        bundledPlugin("org.jetbrains.kotlin")
     }
 }
 
@@ -26,5 +27,6 @@ tasks {
     withType<JavaCompile> {
         sourceCompatibility = "17"
         targetCompatibility = "17"
+        options.compilerArgs.add("-Xlint:deprecation")
     }
 }

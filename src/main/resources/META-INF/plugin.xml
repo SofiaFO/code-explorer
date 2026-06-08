@@ -11,6 +11,7 @@
     <depends>com.intellij.modules.java</depends>
 
     <extensions defaultExtensionNs="com.intellij">
+        <projectService serviceImplementation="com.sofia.codeexplorer.analyzer.AnalysisCacheService"/>
         <toolWindow
                 id="CodeExplorer"
                 secondary="false"

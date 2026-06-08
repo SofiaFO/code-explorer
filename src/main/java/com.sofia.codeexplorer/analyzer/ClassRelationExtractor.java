@@ -1,9 +1,11 @@
 package com.sofia.codeexplorer.analyzer;
 
+import com.intellij.ide.highlighter.JavaFileType;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
+import com.intellij.psi.search.FileTypeIndex;
 import com.intellij.psi.search.GlobalSearchScope;
-import com.intellij.psi.search.PsiShortNamesCache;
 import com.sofia.codeexplorer.model.ClassNode;
 import com.sofia.codeexplorer.model.DependencyEdge;
 import com.sofia.codeexplorer.model.EdgeType;
@@ -24,14 +26,29 @@ public class ClassRelationExtractor {
         Map<String, ClassNode> nodes = new LinkedHashMap<>();
         List<DependencyEdge>   edges = new ArrayList<>();
 
-        GlobalSearchScope scope  = GlobalSearchScope.projectScope(project);
-        JavaPsiFacade     facade = JavaPsiFacade.getInstance(project);
-        String[]          names  = PsiShortNamesCache.getInstance(project).getAllClassNames();
+        GlobalSearchScope scope      = GlobalSearchScope.projectScope(project);
+        PsiManager        psiManager = PsiManager.getInstance(project);
 
-        for (String name : names) {
-            PsiClass[] classes = facade.findClasses(name, scope);
-            for (PsiClass psiClass : classes) {
-                processClass(psiClass, nodes, edges);
+        for (VirtualFile vf : FileTypeIndex.getFiles(JavaFileType.INSTANCE, scope)) {
+            PsiFile psiFile = psiManager.findFile(vf);
+            if (!(psiFile instanceof PsiJavaFile)) continue;
+            for (PsiClass cls : ((PsiJavaFile) psiFile).getClasses()) {
+                processClass(cls, nodes, edges);
+            }
+        }
+
+        // Kotlin: KtFile implements PsiClassOwner when the Kotlin plugin is bundled
+        com.intellij.openapi.fileTypes.FileType ktType =
+            com.intellij.openapi.fileTypes.FileTypeManager.getInstance()
+                .getFileTypeByExtension("kt");
+        if (!(ktType instanceof com.intellij.openapi.fileTypes.UnknownFileType)) {
+            for (VirtualFile vf : FileTypeIndex.getFiles(ktType, scope)) {
+                PsiFile psiFile = psiManager.findFile(vf);
+                if (psiFile instanceof PsiClassOwner) {
+                    for (PsiClass cls : ((PsiClassOwner) psiFile).getClasses()) {
+                        processClass(cls, nodes, edges);
+                    }
+                }
             }
         }
 
