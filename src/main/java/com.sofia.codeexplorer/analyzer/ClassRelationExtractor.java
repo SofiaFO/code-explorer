@@ -208,11 +208,14 @@ public class ClassRelationExtractor {
             }
         }
 
+        Map<String, Integer> cboMap = CouplingAnalyzer.computeCbo(edges);
+
         nodes.forEach((name, node) -> {
             int fanOut = fanOutMap.getOrDefault(name, 0L).intValue();
             int fanIn  = fanInMap.getOrDefault(name, 0L).intValue();
             node.setFanOut(fanOut);
             node.setFanIn(fanIn);
+            node.setCbo(cboMap.getOrDefault(name, 0));
             node.setNoc(nocMap.getOrDefault(name, 0L).intValue());
             node.setImplementationsCount(implMap.getOrDefault(name, 0L).intValue());
 

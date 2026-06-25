@@ -18,8 +18,6 @@ public class HierarchyJsonBuilder {
     public static String build(ClassRelationExtractor.ExtractionResult result,
                                 List<List<String>> cycles,
                                 String rootName) {
-        Map<String, Integer> cboMap = CouplingAnalyzer.computeCbo(result.edges);
-
         PackageNode root = new PackageNode(rootName);
         for (ClassNode node : result.nodes) {
             PackageNode parent = root;
@@ -35,7 +33,7 @@ public class HierarchyJsonBuilder {
         StringBuilder sb = new StringBuilder("{\n");
         sb.append("  \"name\": \"").append(esc(rootName)).append("\",\n");
         sb.append("  \"children\": [\n");
-        writeChildren(sb, root, cboMap, 2);
+        writeChildren(sb, root, 2);
         sb.append("  ],\n");
 
         sb.append("  \"edges\": [\n");
@@ -90,8 +88,7 @@ public class HierarchyJsonBuilder {
         return node;
     }
 
-    private static void writeChildren(StringBuilder sb, PackageNode node,
-                                       Map<String, Integer> cboMap, int indent) {
+    private static void writeChildren(StringBuilder sb, PackageNode node, int indent) {
         List<PackageNode> pkgChildren = new ArrayList<>(node.children.values());
         pkgChildren.sort(Comparator.comparing(p -> p.name));
         List<ClassNode> classChildren = new ArrayList<>(node.classes);
@@ -105,7 +102,7 @@ public class HierarchyJsonBuilder {
             sb.append(pad).append("{\n");
             sb.append(pad).append("  \"name\": \"").append(esc(child.name)).append("\",\n");
             sb.append(pad).append("  \"children\": [\n");
-            writeChildren(sb, child, cboMap, indent + 2);
+            writeChildren(sb, child, indent + 2);
             sb.append(pad).append("  ]\n");
             sb.append(pad).append('}');
             written++;
@@ -116,7 +113,6 @@ public class HierarchyJsonBuilder {
             int fanIn = n.getFanIn();
             // d3.pack() colapsa círculos de value 0; muitas classes têm fanIn 0.
             int value = Math.max(fanIn, 1);
-            int cbo = cboMap.getOrDefault(n.getQualifiedName(), 0);
 
             sb.append(pad).append("{\n");
             sb.append(pad).append("  \"name\": \"").append(esc(n.getSimpleName())).append("\",\n");
@@ -125,8 +121,8 @@ public class HierarchyJsonBuilder {
             sb.append(pad).append("  \"value\": ").append(value).append(",\n");
             sb.append(pad).append("  \"fanIn\": ").append(fanIn).append(",\n");
             sb.append(pad).append("  \"fanOut\": ").append(n.getFanOut()).append(",\n");
-            sb.append(pad).append("  \"cbo\": ").append(cbo).append(",\n");
-            sb.append(pad).append("  \"severity\": \"").append(CouplingAnalyzer.classify(n)).append("\"\n");
+            sb.append(pad).append("  \"cbo\": ").append(n.getCbo()).append(",\n");
+            sb.append(pad).append("  \"couplingLevel\": \"").append(CouplingAnalyzer.classify(n)).append("\"\n");
             sb.append(pad).append('}');
             written++;
             sb.append(written < total ? "," : "").append('\n');

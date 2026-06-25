@@ -13,20 +13,20 @@ import java.util.stream.Collectors;
 
 public class CouplingAnalyzer {
 
-    public enum Severity { OK, MODERADO, ALTO, CRITICO }
+    public enum CouplingLevel { BAIXO, MODERADO, ALTO, SEVERO }
 
-    public static Severity classify(ClassNode node) {
-        int fanOut = node.getFanOut();
-        if (fanOut >= 7) return Severity.CRITICO;
-        if (fanOut >= 4) return Severity.ALTO;
-        if (fanOut >= 2) return Severity.MODERADO;
-        return Severity.OK;
+    public static CouplingLevel classify(ClassNode node) {
+        int cbo = node.getCbo();
+        if (cbo >= 10) return CouplingLevel.SEVERO;
+        if (cbo >= 6)  return CouplingLevel.ALTO;
+        if (cbo >= 3)  return CouplingLevel.MODERADO;
+        return CouplingLevel.BAIXO;
     }
 
-    public static List<ClassNode> getByMinSeverity(List<ClassNode> nodes, Severity minSeverity) {
+    public static List<ClassNode> getByMinLevel(List<ClassNode> nodes, CouplingLevel minLevel) {
         return nodes.stream()
-                .filter(n -> classify(n).ordinal() >= minSeverity.ordinal())
-                .sorted(Comparator.comparingInt(ClassNode::getFanOut).reversed())
+                .filter(n -> classify(n).ordinal() >= minLevel.ordinal())
+                .sorted(Comparator.comparingInt(ClassNode::getCbo).reversed())
                 .collect(Collectors.toList());
     }
 

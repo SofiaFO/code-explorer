@@ -56,9 +56,12 @@ public class GraphHtmlPanel extends JPanel {
           #app { display: flex; width: 100vw; height: 100vh; }
           #chart-container { flex: 1 1 auto; position: relative; background: #fafafa; min-width: 0; }
           svg { width: 100%; height: 100%; display: block; }
+          #resizer { flex: 0 0 6px; cursor: col-resize; background: #ddd; }
+          #resizer:hover, #resizer.dragging { background: #90a4ae; }
           #sidebar {
             flex: 0 0 260px; background: #f5f5f5; border-left: 1px solid #ccc;
             overflow-y: auto; padding: 12px; box-sizing: border-box; font-size: 13px; color: #333;
+            word-break: break-word;
           }
           #sidebar h3 { margin: 0 0 8px; font-size: 15px; }
           #sidebar .qname { color: #777; font-size: 11px; word-break: break-all; margin-bottom: 10px; }
@@ -72,13 +75,14 @@ public class GraphHtmlPanel extends JPanel {
             pointer-events: none; line-height: 1.6;
           }
           #legend .hint { margin-bottom: 4px; }
+          #legend .encoding { margin-bottom: 2px; font-weight: bold; }
+          #legend .swatches { margin-bottom: 4px; }
           #legend .swatches span { display: inline-flex; align-items: center; margin-right: 10px; }
           #legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
           #legend i.border-sample { background: #fff; border: 2px solid; }
           #legend i.border-sample.interface { border-color: #9C27B0; border-width: 3px; }
           #legend i.border-sample.abstract { border-color: #2196F3; border-style: dashed; }
           .node-label { font: 10px sans-serif; pointer-events: none; text-anchor: middle; }
-          .cycle-edge { stroke: #e74c3c; stroke-width: 2px; fill: none; vector-effect: non-scaling-stroke; }
           .selected-node { stroke: #1565C0 !important; stroke-width: 4px !important; }
         </style>
         </head>
@@ -87,17 +91,20 @@ public class GraphHtmlPanel extends JPanel {
           <div id="chart-container">
             <div id="legend">
               <div class="hint">Clique num pacote para dar zoom · clique numa classe para ver detalhes · clique fora para voltar</div>
+              <div class="encoding">Cor — nível de acoplamento (CBO):</div>
               <div class="swatches">
-                <span><i style="background:#4CAF50"></i>OK</span>
-                <span><i style="background:#FFC107"></i>Moderado</span>
-                <span><i style="background:#FF9800"></i>Alto</span>
-                <span><i style="background:#F44336"></i>Crítico</span>
+                <span><i style="background:#709AB3"></i>Baixo</span>
+                <span><i style="background:#653364"></i>Moderado</span>
+                <span><i style="background:#C37EA6"></i>Alto</span>
+                <span><i style="background:#66002F"></i>Severo</span>
                 <span><i class="border-sample interface"></i>Interface</span>
                 <span><i class="border-sample abstract"></i>Classe abstrata</span>
               </div>
+              <div class="encoding">Tamanho — fan-in (quantas classes dependem desta)</div>
             </div>
             <svg id="chart"></svg>
           </div>
+          <div id="resizer"></div>
           <div id="sidebar"></div>
         </div>
         <script>
@@ -109,21 +116,49 @@ public class GraphHtmlPanel extends JPanel {
           const width = 928, height = 928;
           const sidebar = document.getElementById("sidebar");
 
+          // Arrastar #resizer ajusta a largura da sidebar (flex-basis),
+          // entre um mínimo legível e um máximo que não engula o gráfico.
+          (function setupSidebarResize() {
+            const resizer = document.getElementById("resizer");
+            let dragging = false;
+
+            resizer.addEventListener("mousedown", (event) => {
+              dragging = true;
+              resizer.classList.add("dragging");
+              document.body.style.cursor = "col-resize";
+              event.preventDefault();
+            });
+
+            window.addEventListener("mousemove", (event) => {
+              if (!dragging) return;
+              const newWidth = window.innerWidth - event.clientX;
+              const clamped = Math.min(Math.max(newWidth, 180), window.innerWidth - 200);
+              sidebar.style.flexBasis = clamped + "px";
+            });
+
+            window.addEventListener("mouseup", () => {
+              if (!dragging) return;
+              dragging = false;
+              resizer.classList.remove("dragging");
+              document.body.style.cursor = "";
+            });
+          })();
+
           // Cor de pacote: escala sequencial neutra por profundidade (não usa
           // tons de severidade/tipo, que são reservados para as folhas/classes).
           const packageColor = d3.scaleLinear()
-              .domain([0, 6])
-              .range(["#eceff1", "#37474f"])
+              .domain([0, 4])
+              .range(["#cfd8dc", "#374C58"])
               .interpolate(d3.interpolateHcl);
 
-          // Fill = sempre severidade.
-          function severityFill(severity) {
-            switch (severity) {
-              case "OK": return "#4CAF50";
-              case "MODERADO": return "#FFC107";
-              case "ALTO": return "#FF9800";
-              case "CRITICO": return "#F44336";
-              default: return "#bdc3c7";
+          // Fill = sempre nível de acoplamento.
+          function couplingFill(level) {
+            switch (level) {
+              case "BAIXO":    return "#709AB3";
+              case "MODERADO": return "#653364";
+              case "ALTO":     return "#C37EA6";
+              case "SEVERO":   return "#66002F";
+              default:         return "#bdc3c7";
             }
           }
 
@@ -152,7 +187,7 @@ public class GraphHtmlPanel extends JPanel {
               .sum(d => d.value || 0)
               .sort((a, b) => (b.value || 0) - (a.value || 0)));
 
-          // Mapa qualifiedName -> nó da hierarquia, usado pelo painel lateral e pelos ciclos.
+          // Mapa qualifiedName -> nó da hierarquia, usado pelo painel lateral.
           const byQName = new Map(
             root.descendants()
               .filter(d => d.data.qualifiedName)
@@ -180,25 +215,24 @@ public class GraphHtmlPanel extends JPanel {
             .selectAll("circle")
             .data(root.descendants().slice(1))
             .join("circle")
-              .attr("fill", d => d.children ? packageColor(d.depth) : severityFill(d.data.severity))
-              .attr("fill-opacity", d => d.children ? 0.55 : 0.9)
-              .attr("stroke", d => d.children ? "#607d8b" : typeStroke(d.data.type).color)
+              .attr("fill", d => d.children ? packageColor(d.depth) : couplingFill(d.data.couplingLevel))
+              .attr("fill-opacity", d => d.children ? 0.85 : 0.9)
+              .attr("stroke", d => d.children ? "#37474f" : typeStroke(d.data.type).color)
               .attr("stroke-width", d => d.children ? 1 : typeStroke(d.data.type).width)
               .attr("stroke-dasharray", d => d.children ? null : typeStroke(d.data.type).dash)
-              .attr("stroke-opacity", d => d.children ? 0.4 : 0.8)
+              .attr("stroke-opacity", d => d.children ? 0.6 : 0.8)
               .on("mouseover", function () { d3.select(this).attr("stroke-opacity", 1); })
               .on("mouseout", function (event, d) {
                 d3.select(this).attr("stroke-opacity", d.children ? 0.4 : 0.8);
               })
               .on("click", (event, d) => {
                 event.stopPropagation();
-                if (d.children) {
-                  if (focus !== d) zoom(event, d);
-                } else {
+                if (!d.children) {
                   selectedQName = (selectedQName === d.data.qualifiedName) ? null : d.data.qualifiedName;
                   updateSelectionHighlight();
                   renderSidebar();
                 }
+                if (focus !== d) zoom(event, d);
               });
 
           const label = g.append("g")
@@ -211,15 +245,8 @@ public class GraphHtmlPanel extends JPanel {
               .style("display", d => d.parent === root ? "inline" : "none")
               .text(d => d.data.name);
 
-          // Ciclos: sempre visíveis, sobrepostos ao circle packing.
-          const cycleGroup = g.append("g");
-
           zoomTo([root.x, root.y, root.r * 2]);
           renderSidebar();
-
-          function project(d) {
-            return [(d.x - view[0]) * k, (d.y - view[1]) * k];
-          }
 
           function zoomTo(v) {
             k = width / v[2];
@@ -227,7 +254,6 @@ public class GraphHtmlPanel extends JPanel {
             label.attr("transform", d => `translate(${(d.x - v[0]) * k},${(d.y - v[1]) * k})`);
             node.attr("transform", d => `translate(${(d.x - v[0]) * k},${(d.y - v[1]) * k})`);
             node.attr("r", d => d.r * k);
-            renderCycles();
           }
 
           function zoom(event, d) {
@@ -251,23 +277,6 @@ public class GraphHtmlPanel extends JPanel {
             node.classed("selected-node", d => d.data.qualifiedName === selectedQName);
           }
 
-          function renderCycles() {
-            const pairs = [];
-            (data.cycles || []).forEach(cycle => {
-              for (let i = 0; i < cycle.length; i++) {
-                const from = byQName.get(cycle[i]);
-                const to = byQName.get(cycle[(i + 1) % cycle.length]);
-                if (from && to) pairs.push({ from, to });
-              }
-            });
-            const lines = cycleGroup.selectAll("line").data(pairs);
-            lines.join("line").attr("class", "cycle-edge")
-                .attr("x1", p => project(p.from)[0])
-                .attr("y1", p => project(p.from)[1])
-                .attr("x2", p => project(p.to)[0])
-                .attr("y2", p => project(p.to)[1]);
-          }
-
           function lastSegment(qualifiedName) {
             const i = qualifiedName.lastIndexOf(".");
             return i >= 0 ? qualifiedName.substring(i + 1) : qualifiedName;
@@ -280,15 +289,16 @@ public class GraphHtmlPanel extends JPanel {
           function summaryPanelHtml() {
             const leaves = root.leaves();
             const packages = root.descendants().filter(d => d.children && d !== root).length;
-            const bySeverity = { OK: 0, MODERADO: 0, ALTO: 0, CRITICO: 0 };
-            leaves.forEach(l => { if (bySeverity[l.data.severity] !== undefined) bySeverity[l.data.severity]++; });
+            const byLevel = { BAIXO: 0, MODERADO: 0, ALTO: 0, SEVERO: 0 };
+            leaves.forEach(l => { if (byLevel[l.data.couplingLevel] !== undefined) byLevel[l.data.couplingLevel]++; });
 
             return `
               <h3>Resumo do projeto</h3>
               <div class="stat-line">Classes: <b>${leaves.length}</b></div>
               <div class="stat-line">Pacotes: <b>${packages}</b></div>
               <div class="stat-line">Ciclos: <b>${(data.cycles || []).length}</b></div>
-              <div class="stat-line">OK: <b>${bySeverity.OK}</b> · MODERADO: <b>${bySeverity.MODERADO}</b> · ALTO: <b>${bySeverity.ALTO}</b> · CRITICO: <b>${bySeverity.CRITICO}</b></div>
+              <div class="stat-line" style="margin-top:6px;"><b>Acoplamento (CBO):</b></div>
+              <div class="stat-line">Baixo: <b>${byLevel.BAIXO}</b> · Moderado: <b>${byLevel.MODERADO}</b> · Alto: <b>${byLevel.ALTO}</b> · Severo: <b>${byLevel.SEVERO}</b></div>
             `;
           }
 
@@ -313,10 +323,9 @@ public class GraphHtmlPanel extends JPanel {
               <div class="qname">${qName}</div>
               <div class="stat-line">Tipo: <b>${TYPE_LABELS[cls.type] || cls.type}</b></div>
               <div class="stat-line">Pacote: <b>${pkg}</b></div>
-              <div class="stat-line">Fan-in: <b>${cls.fanIn}</b></div>
+              <div class="stat-line">Fan-in (tamanho): <b>${cls.fanIn}</b></div>
               <div class="stat-line">Fan-out: <b>${cls.fanOut}</b></div>
-              <div class="stat-line">CBO: <b>${cls.cbo}</b></div>
-              <div class="stat-line">Severidade: <b>${cls.severity}</b></div>
+              <div class="stat-line">CBO (cor): <b>${cls.cbo}</b> — <b>${cls.couplingLevel}</b></div>
               <div class="stat-line" style="margin-top:8px;"><b>Usa:</b></div>
               <ul>${uses}</ul>
               <div class="stat-line"><b>Usado por:</b></div>

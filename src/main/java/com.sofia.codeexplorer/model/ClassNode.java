@@ -10,6 +10,7 @@ public class ClassNode {
 
     private int    fanIn               = 0;
     private int    fanOut              = 0;
+    private int    cbo                 = 0;
     private double instability         = 0.0;
     private int    noc                 = 0;
     private int    dit                 = 0;
@@ -31,6 +32,7 @@ public class ClassNode {
     public String  getFilePath()             { return filePath; }
     public int     getFanIn()                { return fanIn; }
     public int     getFanOut()               { return fanOut; }
+    public int     getCbo()                  { return cbo; }
     public double  getInstability()          { return instability; }
     public int     getNoc()                  { return noc; }
     public int     getDit()                  { return dit; }
@@ -38,6 +40,7 @@ public class ClassNode {
 
     public void setFanIn(int v)               { this.fanIn               = v; }
     public void setFanOut(int v)              { this.fanOut              = v; }
+    public void setCbo(int v)                 { this.cbo                 = v; }
     public void setInstability(double v)      { this.instability         = v; }
     public void setNoc(int v)                 { this.noc                 = v; }
     public void setDit(int v)                 { this.dit                 = v; }
