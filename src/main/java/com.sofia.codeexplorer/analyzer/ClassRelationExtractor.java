@@ -84,13 +84,26 @@ public class ClassRelationExtractor {
             packageName = ((PsiJavaFile) psiClass.getContainingFile()).getPackageName();
         }
 
-        nodes.put(qualifiedName, new ClassNode(
+        ClassNode node = new ClassNode(
                 qualifiedName,
                 psiClass.getName() != null ? psiClass.getName() : qualifiedName,
                 packageName,
                 nodeType,
                 filePath
-        ));
+        );
+        // Conta linhas só do trecho da classe dentro do arquivo (não do arquivo
+        // inteiro) — importa quando há múltiplas classes por arquivo.
+        try {
+            String fileText = psiClass.getContainingFile().getText();
+            int start = psiClass.getTextRange().getStartOffset();
+            int end   = psiClass.getTextRange().getEndOffset();
+            String classText = fileText.substring(start, end);
+            int loc = (int) classText.chars().filter(c -> c == '\n').count() + 1;
+            node.setLoc(loc);
+        } catch (Exception e) {
+            node.setLoc(1);
+        }
+        nodes.put(qualifiedName, node);
 
         // 1. Herança
         PsiClass superClass = psiClass.getSuperClass();

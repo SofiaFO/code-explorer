@@ -8,6 +8,7 @@ public class ClassNode {
     private final NodeType type;
     private final String filePath;
 
+    private int    loc                 = 0;
     private int    fanIn               = 0;
     private int    fanOut              = 0;
     private int    cbo                 = 0;
@@ -30,6 +31,7 @@ public class ClassNode {
     public String  getPackageName()          { return packageName; }
     public NodeType getType()                { return type; }
     public String  getFilePath()             { return filePath; }
+    public int     getLoc()                  { return loc; }
     public int     getFanIn()                { return fanIn; }
     public int     getFanOut()               { return fanOut; }
     public int     getCbo()                  { return cbo; }
@@ -38,6 +40,7 @@ public class ClassNode {
     public int     getDit()                  { return dit; }
     public int     getImplementationsCount() { return implementationsCount; }
 
+    public void setLoc(int v)                 { this.loc                 = v; }
     public void setFanIn(int v)               { this.fanIn               = v; }
     public void setFanOut(int v)              { this.fanOut              = v; }
     public void setCbo(int v)                 { this.cbo                 = v; }

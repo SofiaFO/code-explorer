@@ -69,6 +69,12 @@ public class GraphHtmlPanel extends JPanel {
           #sidebar .stat-line b { color: #000; }
           #sidebar ul { margin: 4px 0 10px; padding-left: 18px; }
           #sidebar li { margin: 2px 0; }
+          .metric-row { display: flex; align-items: center; gap: 6px; margin: 6px 0; font-size: 12px; }
+          .metric-label { color: #666; min-width: 55px; }
+          .metric-value { font-weight: 500; min-width: 28px; text-align: right; }
+          .metric-bar-bg { flex: 1; height: 6px; background: #e0e0e0; border-radius: 3px; }
+          .metric-bar-fill { height: 6px; border-radius: 3px; }
+          .metric-max { color: #999; font-size: 11px; min-width: 50px; }
           #legend {
             position: absolute; top: 8px; left: 8px; font-size: 12px; color: #444;
             background: rgba(255,255,255,0.9); padding: 6px 10px; border-radius: 4px;
@@ -79,9 +85,11 @@ public class GraphHtmlPanel extends JPanel {
           #legend .swatches { margin-bottom: 4px; }
           #legend .swatches span { display: inline-flex; align-items: center; margin-right: 10px; }
           #legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
-          #legend i.border-sample { background: #fff; border: 2px solid; }
-          #legend i.border-sample.interface { border-color: #9C27B0; border-width: 3px; }
-          #legend i.border-sample.abstract { border-color: #2196F3; border-style: dashed; }
+          #legend i.ring-sample { background: #fff; border: 2px solid #1565C0; }
+          #legend .viridis-gradient {
+            width: 160px; height: 10px; border-radius: 3px; margin: 2px 0 4px;
+            background: linear-gradient(to right, #440154, #31688E, #35B779, #90D743, #FDE725);
+          }
           .node-label { font: 10px sans-serif; pointer-events: none; text-anchor: middle; }
           .selected-node { stroke: #1565C0 !important; stroke-width: 4px !important; }
         </style>
@@ -91,16 +99,12 @@ public class GraphHtmlPanel extends JPanel {
           <div id="chart-container">
             <div id="legend">
               <div class="hint">Clique num pacote para dar zoom · clique numa classe para ver detalhes · clique fora para voltar</div>
-              <div class="encoding">Cor — nível de acoplamento (CBO):</div>
+              <div class="encoding">Cor — fan-out (roxo = baixo · amarelo = alto)</div>
+              <div class="viridis-gradient"></div>
+              <div class="encoding">Tamanho — linhas de código (LOC)</div>
               <div class="swatches">
-                <span><i style="background:#709AB3"></i>Baixo</span>
-                <span><i style="background:#653364"></i>Moderado</span>
-                <span><i style="background:#C37EA6"></i>Alto</span>
-                <span><i style="background:#66002F"></i>Severo</span>
-                <span><i class="border-sample interface"></i>Interface</span>
-                <span><i class="border-sample abstract"></i>Classe abstrata</span>
+                <span><i class="ring-sample"></i>Fan-in (anel = proporção do máximo)</span>
               </div>
-              <div class="encoding">Tamanho — fan-in (quantas classes dependem desta)</div>
             </div>
             <svg id="chart"></svg>
           </div>
@@ -144,30 +148,18 @@ public class GraphHtmlPanel extends JPanel {
             });
           })();
 
-          // Cor de pacote: escala sequencial neutra por profundidade (não usa
-          // tons de severidade/tipo, que são reservados para as folhas/classes).
-          const packageColor = d3.scaleLinear()
-              .domain([0, 4])
-              .range(["#cfd8dc", "#374C58"])
-              .interpolate(d3.interpolateHcl);
+          // Cor de pacote: única, quase branca, independente da profundidade.
+          // Serve só de "container" neutro — as cores fortes ficam reservadas
+          // pras classes (fan-out), que são a informação real. A separação
+          // entre pacotes aninhados vem da borda (stroke), não do preenchimento.
+          const PACKAGE_COLOR = "#FAFAFA";
 
-          // Fill = sempre nível de acoplamento.
-          function couplingFill(level) {
-            switch (level) {
-              case "BAIXO":    return "#709AB3";
-              case "MODERADO": return "#653364";
-              case "ALTO":     return "#C37EA6";
-              case "SEVERO":   return "#66002F";
-              default:         return "#bdc3c7";
-            }
-          }
-
-          // Stroke = sempre tipo, independente de severidade.
-          function typeStroke(type) {
-            if (type === "INTERFACE") return { color: "#9C27B0", width: 3, dash: null };
-            if (type === "ABSTRACT_CLASS") return { color: "#2196F3", width: 2, dash: "4,2" };
-            return { color: "#999", width: 1, dash: null };
-          }
+          // Fill das classes = fan-out normalizado pelo máximo do projeto,
+          // via escala contínua Viridis — sem limiares arbitrários de
+          // severidade. Fan-out baixo cai no roxo escuro, alto no amarelo.
+          const colorScale = d3.scaleSequential()
+              .domain([0, GRAPH_DATA.maxFanOut || 1])
+              .interpolator(d3.interpolateViridis);
 
           const TYPE_LABELS = {
             CLASS: "Classe",
@@ -211,19 +203,43 @@ public class GraphHtmlPanel extends JPanel {
 
           const g = svg.append("g");
 
-          const node = g.append("g")
-            .selectAll("circle")
+          const RING_GAP_MAX = 4;
+          const RING_STROKE_WIDTH_MAX = 3;
+          const RING_COLOR = "#1565C0";
+
+          function fanInRatio(d) {
+            const max = GRAPH_DATA.maxFanIn || 0;
+            return max > 0 ? d.data.fanIn / max : 0;
+          }
+
+          // Gap e espessura proporcionais ao raio JÁ NA TELA (d.r * k), com
+          // teto fixo — não ao raio bruto do layout. Baseado no raio bruto,
+          // um gap/stroke fixo em px "descola" o anel de folhas minúsculas
+          // (pacotes com muitas classes geram círculos de poucos px de raio).
+          // Baseado no raio de tela, ele também fica proporcional durante o
+          // zoom em vez de crescer sem limite conforme k aumenta.
+          function ringGap(d) { return Math.min(RING_GAP_MAX, d.r * k * 0.3); }
+          function ringStrokeWidth(d) { return Math.min(RING_STROKE_WIDTH_MAX, Math.max(0.8, d.r * k * 0.25)); }
+
+          // Um <g> por nó (pacote ou classe) agrupando círculo + anel, para que
+          // ambos acompanhem a mesma translação/raio durante o zoom.
+          const nodeGroup = g.append("g")
+            .selectAll("g")
             .data(root.descendants().slice(1))
-            .join("circle")
-              .attr("fill", d => d.children ? packageColor(d.depth) : couplingFill(d.data.couplingLevel))
+            .join("g");
+
+          const node = nodeGroup.append("circle")
+              .attr("fill", d => d.children ? PACKAGE_COLOR : colorScale(d.data.fanOut))
               .attr("fill-opacity", d => d.children ? 0.85 : 0.9)
-              .attr("stroke", d => d.children ? "#37474f" : typeStroke(d.data.type).color)
-              .attr("stroke-width", d => d.children ? 1 : typeStroke(d.data.type).width)
-              .attr("stroke-dasharray", d => d.children ? null : typeStroke(d.data.type).dash)
-              .attr("stroke-opacity", d => d.children ? 0.6 : 0.8)
+              // Borda das folhas = a própria cor do fill escurecida — sempre
+              // visível em qualquer ponto da escala Viridis, garante contraste
+              // mesmo pra círculos minúsculos que sumiriam sem contorno.
+              .attr("stroke", d => d.children ? "#37474f" : d3.color(colorScale(d.data.fanOut)).darker(1.5))
+              .attr("stroke-width", 1)
+              .attr("stroke-opacity", d => d.children ? 0.6 : 1)
               .on("mouseover", function () { d3.select(this).attr("stroke-opacity", 1); })
               .on("mouseout", function (event, d) {
-                d3.select(this).attr("stroke-opacity", d.children ? 0.4 : 0.8);
+                d3.select(this).attr("stroke-opacity", d.children ? 0.4 : 1);
               })
               .on("click", (event, d) => {
                 event.stopPropagation();
@@ -234,6 +250,22 @@ public class GraphHtmlPanel extends JPanel {
                 }
                 if (focus !== d) zoom(event, d);
               });
+
+          // Anel externo de fan-in, só nas folhas com fan-in > 0. pathLength=100
+          // normaliza o stroke-dasharray para uma escala fixa (0-100), então o
+          // arco continua proporcional mesmo quando o raio muda durante o zoom
+          // — sem precisar recalcular a circunferência a cada frame.
+          const ring = nodeGroup
+            .filter(d => !d.children && fanInRatio(d) > 0)
+            .append("circle")
+              .attr("class", "fanin-ring")
+              .attr("fill", "none")
+              .attr("stroke", RING_COLOR)
+              .attr("stroke-linecap", "round")
+              .attr("pointer-events", "none")
+              .attr("pathLength", 100)
+              .attr("stroke-dasharray", d => `${fanInRatio(d) * 100} ${100 - fanInRatio(d) * 100}`)
+              .attr("transform", "rotate(-90)");
 
           const label = g.append("g")
               .attr("pointer-events", "none")
@@ -252,8 +284,10 @@ public class GraphHtmlPanel extends JPanel {
             k = width / v[2];
             view = v;
             label.attr("transform", d => `translate(${(d.x - v[0]) * k},${(d.y - v[1]) * k})`);
-            node.attr("transform", d => `translate(${(d.x - v[0]) * k},${(d.y - v[1]) * k})`);
+            nodeGroup.attr("transform", d => `translate(${(d.x - v[0]) * k},${(d.y - v[1]) * k})`);
             node.attr("r", d => d.r * k);
+            ring.attr("r", d => d.r * k + ringGap(d));
+            ring.attr("stroke-width", d => ringStrokeWidth(d));
           }
 
           function zoom(event, d) {
@@ -289,16 +323,14 @@ public class GraphHtmlPanel extends JPanel {
           function summaryPanelHtml() {
             const leaves = root.leaves();
             const packages = root.descendants().filter(d => d.children && d !== root).length;
-            const byLevel = { BAIXO: 0, MODERADO: 0, ALTO: 0, SEVERO: 0 };
-            leaves.forEach(l => { if (byLevel[l.data.couplingLevel] !== undefined) byLevel[l.data.couplingLevel]++; });
 
             return `
               <h3>Resumo do projeto</h3>
               <div class="stat-line">Classes: <b>${leaves.length}</b></div>
               <div class="stat-line">Pacotes: <b>${packages}</b></div>
               <div class="stat-line">Ciclos: <b>${(data.cycles || []).length}</b></div>
-              <div class="stat-line" style="margin-top:6px;"><b>Acoplamento (CBO):</b></div>
-              <div class="stat-line">Baixo: <b>${byLevel.BAIXO}</b> · Moderado: <b>${byLevel.MODERADO}</b> · Alto: <b>${byLevel.ALTO}</b> · Severo: <b>${byLevel.SEVERO}</b></div>
+              <div class="stat-line" style="margin-top:6px;">Fan-out máximo (cor): <b>${GRAPH_DATA.maxFanOut || 0}</b></div>
+              <div class="stat-line">Fan-in máximo (anel): <b>${GRAPH_DATA.maxFanIn || 0}</b></div>
             `;
           }
 
@@ -318,14 +350,30 @@ public class GraphHtmlPanel extends JPanel {
               .map(e => `<li>${lastSegment(e.source)} (${e.type})</li>`)
               .join("") || "<li>(nenhuma)</li>";
 
+            const maxFanIn  = GRAPH_DATA.maxFanIn  || 1;
+            const maxFanOut = GRAPH_DATA.maxFanOut || 1;
+            const fanInPct  = maxFanIn  > 0 ? (cls.fanIn  / maxFanIn)  * 100 : 0;
+            const fanOutPct = maxFanOut > 0 ? (cls.fanOut / maxFanOut) * 100 : 0;
+
             return `
               <h3>${cls.name}</h3>
               <div class="qname">${qName}</div>
               <div class="stat-line">Tipo: <b>${TYPE_LABELS[cls.type] || cls.type}</b></div>
               <div class="stat-line">Pacote: <b>${pkg}</b></div>
-              <div class="stat-line">Fan-in (tamanho): <b>${cls.fanIn}</b></div>
-              <div class="stat-line">Fan-out: <b>${cls.fanOut}</b></div>
-              <div class="stat-line">CBO (cor): <b>${cls.cbo}</b> — <b>${cls.couplingLevel}</b></div>
+              <div class="stat-line">Linhas de código (tamanho): <b>${cls.loc}</b></div>
+              <div class="metric-row">
+                <span class="metric-label">Fan-in</span>
+                <span class="metric-value">${cls.fanIn}</span>
+                <div class="metric-bar-bg"><div class="metric-bar-fill" style="width: ${fanInPct}%; background: #1565C0;"></div></div>
+                <span class="metric-max">máx: ${maxFanIn}</span>
+              </div>
+              <div class="metric-row">
+                <span class="metric-label">Fan-out (cor)</span>
+                <span class="metric-value">${cls.fanOut}</span>
+                <div class="metric-bar-bg"><div class="metric-bar-fill" style="width: ${fanOutPct}%; background: #E65100;"></div></div>
+                <span class="metric-max">máx: ${maxFanOut}</span>
+              </div>
+              <div class="stat-line">CBO: <b>${cls.cbo}</b></div>
               <div class="stat-line" style="margin-top:8px;"><b>Usa:</b></div>
               <ul>${uses}</ul>
               <div class="stat-line"><b>Usado por:</b></div>

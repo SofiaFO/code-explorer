@@ -30,8 +30,15 @@ public class HierarchyJsonBuilder {
         }
         collapseChainsInPlace(root);
 
+        int maxFanIn  = result.nodes.stream().mapToInt(ClassNode::getFanIn).max().orElse(1);
+        int maxFanOut = result.nodes.stream().mapToInt(ClassNode::getFanOut).max().orElse(1);
+        int maxLoc    = result.nodes.stream().mapToInt(ClassNode::getLoc).max().orElse(1);
+
         StringBuilder sb = new StringBuilder("{\n");
         sb.append("  \"name\": \"").append(esc(rootName)).append("\",\n");
+        sb.append("  \"maxFanIn\": ").append(maxFanIn).append(",\n");
+        sb.append("  \"maxFanOut\": ").append(maxFanOut).append(",\n");
+        sb.append("  \"maxLoc\": ").append(maxLoc).append(",\n");
         sb.append("  \"children\": [\n");
         writeChildren(sb, root, 2);
         sb.append("  ],\n");
@@ -110,19 +117,18 @@ public class HierarchyJsonBuilder {
         }
 
         for (ClassNode n : classChildren) {
-            int fanIn = n.getFanIn();
-            // d3.pack() colapsa círculos de value 0; muitas classes têm fanIn 0.
-            int value = Math.max(fanIn, 1);
+            // d3.pack() colapsa círculos de value 0; toda classe tem ao menos 1 linha.
+            int value = Math.max(n.getLoc(), 1);
 
             sb.append(pad).append("{\n");
             sb.append(pad).append("  \"name\": \"").append(esc(n.getSimpleName())).append("\",\n");
             sb.append(pad).append("  \"qualifiedName\": \"").append(esc(n.getQualifiedName())).append("\",\n");
             sb.append(pad).append("  \"type\": \"").append(n.getType()).append("\",\n");
             sb.append(pad).append("  \"value\": ").append(value).append(",\n");
-            sb.append(pad).append("  \"fanIn\": ").append(fanIn).append(",\n");
+            sb.append(pad).append("  \"loc\": ").append(n.getLoc()).append(",\n");
+            sb.append(pad).append("  \"fanIn\": ").append(n.getFanIn()).append(",\n");
             sb.append(pad).append("  \"fanOut\": ").append(n.getFanOut()).append(",\n");
-            sb.append(pad).append("  \"cbo\": ").append(n.getCbo()).append(",\n");
-            sb.append(pad).append("  \"couplingLevel\": \"").append(CouplingAnalyzer.classify(n)).append("\"\n");
+            sb.append(pad).append("  \"cbo\": ").append(n.getCbo()).append("\n");
             sb.append(pad).append('}');
             written++;
             sb.append(written < total ? "," : "").append('\n');

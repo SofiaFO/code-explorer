@@ -13,8 +13,13 @@ import static org.junit.Assert.*;
 public class HierarchyJsonBuilderTest {
 
     private static ClassNode node(String qualifiedName, String simpleName, String packageName, int fanIn) {
+        return node(qualifiedName, simpleName, packageName, fanIn, 50);
+    }
+
+    private static ClassNode node(String qualifiedName, String simpleName, String packageName, int fanIn, int loc) {
         ClassNode n = new ClassNode(qualifiedName, simpleName, packageName, NodeType.CLASS, "");
         n.setFanIn(fanIn);
+        n.setLoc(loc);
         return n;
     }
 
@@ -86,14 +91,29 @@ public class HierarchyJsonBuilderTest {
     }
 
     @Test
-    public void valueIsNeverZeroEvenWithoutFanIn() {
-        ClassNode isolated = node("pkg.Isolated", "Isolated", "pkg", 0);
+    public void valueIsNeverZeroEvenWithoutLoc() {
+        // value vem de LOC, não de fanIn — precisa do piso de 1 mesmo com loc 0.
+        ClassNode isolated = node("pkg.Isolated", "Isolated", "pkg", 0, 0);
         var result = new ClassRelationExtractor.ExtractionResult(List.of(isolated), List.of());
 
         String json = HierarchyJsonBuilder.build(result, List.of(), "proj");
 
-        assertTrue(json.contains("\"fanIn\": 0"));
+        assertTrue(json.contains("\"loc\": 0"));
         assertTrue(json.contains("\"value\": 1"));
+    }
+
+    @Test
+    public void rootIncludesMaxFanInFanOutAndLoc() {
+        ClassNode a = node("pkg.A", "A", "pkg", 3, 120);
+        ClassNode b = node("pkg.B", "B", "pkg", 7, 40);
+        b.setFanOut(5);
+        var result = new ClassRelationExtractor.ExtractionResult(List.of(a, b), List.of());
+
+        String json = HierarchyJsonBuilder.build(result, List.of(), "proj");
+
+        assertTrue(json.contains("\"maxFanIn\": 7"));
+        assertTrue(json.contains("\"maxFanOut\": 5"));
+        assertTrue(json.contains("\"maxLoc\": 120"));
     }
 
     @Test
