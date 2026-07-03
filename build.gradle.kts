@@ -10,11 +10,19 @@ repositories {
     }
 }
 
+val localPath = providers.gradleProperty("idea.local.path").orNull
+val platformVersion = providers.gradleProperty("platformVersion")
+    .getOrElse("2026.1.1")
+
 dependencies {
     testImplementation("junit:junit:4.13.2")
 
     intellijPlatform {
-        local("/snap/intellij-idea-ultimate/current")
+        if (!localPath.isNullOrBlank()) {
+            local(localPath)
+        } else {
+            intellijIdeaUltimate(platformVersion)
+        }
         bundledPlugin("com.intellij.java")
         bundledPlugin("org.jetbrains.kotlin")
     }
