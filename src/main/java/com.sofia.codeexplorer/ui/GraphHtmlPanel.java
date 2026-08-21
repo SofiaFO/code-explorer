@@ -85,7 +85,7 @@ public class GraphHtmlPanel extends JPanel {
           #legend .swatches { margin-bottom: 4px; }
           #legend .swatches span { display: inline-flex; align-items: center; margin-right: 10px; }
           #legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
-          #legend i.ring-sample { background: #fff; border: 2px solid #1565C0; }
+          #legend i.ring-sample { background: #fff; border: 3px solid #FF6B00; }
           #legend .viridis-gradient {
             width: 160px; height: 10px; border-radius: 3px; margin: 2px 0 4px;
             background: linear-gradient(to right, #440154, #31688E, #35B779, #90D743, #FDE725);
@@ -203,9 +203,9 @@ public class GraphHtmlPanel extends JPanel {
 
           const g = svg.append("g");
 
-          const RING_GAP_MAX = 4;
-          const RING_STROKE_WIDTH_MAX = 3;
-          const RING_COLOR = "#1565C0";
+          const RING_GAP_MAX = 13;
+          const RING_STROKE_WIDTH_MAX = 6;
+          const RING_COLOR = "#FF6B00";
 
           function fanInRatio(d) {
             const max = GRAPH_DATA.maxFanIn || 0;
@@ -219,7 +219,7 @@ public class GraphHtmlPanel extends JPanel {
           // Baseado no raio de tela, ele também fica proporcional durante o
           // zoom em vez de crescer sem limite conforme k aumenta.
           function ringGap(d) { return Math.min(RING_GAP_MAX, d.r * k * 0.3); }
-          function ringStrokeWidth(d) { return Math.min(RING_STROKE_WIDTH_MAX, Math.max(0.8, d.r * k * 0.25)); }
+          function ringStrokeWidth(d) { return Math.min(RING_STROKE_WIDTH_MAX, Math.max(2.5, d.r * k * 0.25)); }
 
           // Um <g> por nó (pacote ou classe) agrupando círculo + anel, para que
           // ambos acompanhem a mesma translação/raio durante o zoom.

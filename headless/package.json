@@ -1,0 +1,12 @@
+{
+  "name": "codeexplorer-headless",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Renderização headless (Puppeteer) do circle packing do CodeExplorer, para o pipeline de CI.",
+  "scripts": {
+    "screenshot": "node screenshot.js"
+  },
+  "dependencies": {
+    "puppeteer": "^21.0.0"
+  }
+}
