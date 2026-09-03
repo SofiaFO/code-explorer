@@ -75,6 +75,7 @@ public class GraphHtmlPanel extends JPanel {
           .metric-bar-bg { flex: 1; height: 6px; background: #e0e0e0; border-radius: 3px; }
           .metric-bar-fill { height: 6px; border-radius: 3px; }
           .metric-max { color: #999; font-size: 11px; min-width: 50px; }
+          .rel-count { color: #999; font-size: 11px; }
           #legend {
             position: absolute; top: 8px; left: 8px; font-size: 12px; color: #444;
             background: rgba(255,255,255,0.9); padding: 6px 10px; border-radius: 4px;
@@ -203,7 +204,6 @@ public class GraphHtmlPanel extends JPanel {
 
           const g = svg.append("g");
 
-          const RING_GAP_MAX = 13;
           const RING_STROKE_WIDTH_MAX = 6;
           const RING_COLOR = "#FF6B00";
 
@@ -212,13 +212,12 @@ public class GraphHtmlPanel extends JPanel {
             return max > 0 ? d.data.fanIn / max : 0;
           }
 
-          // Gap e espessura proporcionais ao raio JÁ NA TELA (d.r * k), com
-          // teto fixo — não ao raio bruto do layout. Baseado no raio bruto,
-          // um gap/stroke fixo em px "descola" o anel de folhas minúsculas
-          // (pacotes com muitas classes geram círculos de poucos px de raio).
-          // Baseado no raio de tela, ele também fica proporcional durante o
-          // zoom em vez de crescer sem limite conforme k aumenta.
-          function ringGap(d) { return Math.min(RING_GAP_MAX, d.r * k * 0.3); }
+          // Espessura proporcional ao raio JÁ NA TELA (d.r * k), com teto fixo —
+          // não ao raio bruto do layout. Baseado no raio bruto, um stroke fixo
+          // em px "descola" o anel de folhas minúsculas (pacotes com muitas
+          // classes geram círculos de poucos px de raio). Baseado no raio de
+          // tela, ele também fica proporcional durante o zoom em vez de crescer
+          // sem limite conforme k aumenta.
           function ringStrokeWidth(d) { return Math.min(RING_STROKE_WIDTH_MAX, Math.max(2.5, d.r * k * 0.25)); }
 
           // Um <g> por nó (pacote ou classe) agrupando círculo + anel, para que
@@ -251,10 +250,11 @@ public class GraphHtmlPanel extends JPanel {
                 if (focus !== d) zoom(event, d);
               });
 
-          // Anel externo de fan-in, só nas folhas com fan-in > 0. pathLength=100
-          // normaliza o stroke-dasharray para uma escala fixa (0-100), então o
-          // arco continua proporcional mesmo quando o raio muda durante o zoom
-          // — sem precisar recalcular a circunferência a cada frame.
+          // Anel de fan-in (por dentro do círculo), só nas folhas com fan-in > 0.
+          // pathLength=100 normaliza o stroke-dasharray para uma escala fixa
+          // (0-100), então o arco continua proporcional mesmo quando o raio
+          // muda durante o zoom — sem precisar recalcular a circunferência a
+          // cada frame.
           const ring = nodeGroup
             .filter(d => !d.children && fanInRatio(d) > 0)
             .append("circle")
@@ -286,7 +286,7 @@ public class GraphHtmlPanel extends JPanel {
             label.attr("transform", d => `translate(${(d.x - v[0]) * k},${(d.y - v[1]) * k})`);
             nodeGroup.attr("transform", d => `translate(${(d.x - v[0]) * k},${(d.y - v[1]) * k})`);
             node.attr("r", d => d.r * k);
-            ring.attr("r", d => d.r * k + ringGap(d));
+            ring.attr("r", d => d.r * k);
             ring.attr("stroke-width", d => ringStrokeWidth(d));
           }
 
@@ -334,21 +334,40 @@ public class GraphHtmlPanel extends JPanel {
             `;
           }
 
+          // Agrupa arestas repetidas (mesmo alvo/origem + mesmo tipo), já que
+          // uma classe pode chamar/usar a mesma outra classe várias vezes no
+          // código — sem isso a lista repete a mesma linha uma vez por
+          // ocorrência.
+          function groupRelations(names) {
+            const order = [];
+            const byKey = new Map();
+            for (const name of names) {
+              const entry = byKey.get(name);
+              if (entry) entry.count++;
+              else { const e = { name, count: 1 }; byKey.set(name, e); order.push(e); }
+            }
+            return order
+              .map(({ name, count }) => `<li>${name}${count > 1 ? ` <span class="rel-count">×${count}</span>` : ""}</li>`)
+              .join("") || "<li>(nenhuma)</li>";
+          }
+
           function classPanelHtml(qName) {
             const d = byQName.get(qName);
             if (!d) return summaryPanelHtml();
             const cls = d.data;
             const pkg = qName.includes(".") ? qName.slice(0, qName.length - cls.name.length - 1) : "(pacote default)";
 
-            const uses = (data.edges || [])
-              .filter(e => e.source === qName)
-              .map(e => `<li>${lastSegment(e.target)} (${e.type})</li>`)
-              .join("") || "<li>(nenhuma)</li>";
+            const uses = groupRelations(
+              (data.edges || [])
+                .filter(e => e.source === qName)
+                .map(e => `${lastSegment(e.target)} (${e.type})`)
+            );
 
-            const usedBy = (data.edges || [])
-              .filter(e => e.target === qName)
-              .map(e => `<li>${lastSegment(e.source)} (${e.type})</li>`)
-              .join("") || "<li>(nenhuma)</li>";
+            const usedBy = groupRelations(
+              (data.edges || [])
+                .filter(e => e.target === qName)
+                .map(e => `${lastSegment(e.source)} (${e.type})`)
+            );
 
             const maxFanIn  = GRAPH_DATA.maxFanIn  || 1;
             const maxFanOut = GRAPH_DATA.maxFanOut || 1;
