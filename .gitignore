@@ -2,12 +2,6 @@
 out/
 *.class
 
-# Gradle
-.gradle/
-gradle-app.setting
-!gradle-wrapper.jar
-!gradle-wrapper.properties
-
 # Build
 build/
 
@@ -27,8 +21,6 @@ build/
 
 # Gradle
 .gradle/
-build/
-gradle/
 gradlew
 gradlew.bat
 
