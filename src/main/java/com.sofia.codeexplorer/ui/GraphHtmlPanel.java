@@ -126,31 +126,37 @@ public class GraphHtmlPanel extends JPanel {
           }
 
           #legend {
-            position: absolute; top: 12px; left: 12px;
+            position: absolute; top: 10px; left: 10px;
             background: var(--legend-bg); border: 1px solid var(--legend-border);
-            border-radius: 8px; padding: 10px 14px;
+            border-radius: 6px; padding: 8px 10px;
             font-family: 'JetBrains Mono', 'Fira Code', monospace;
-            z-index: 10; min-width: 210px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            z-index: 10; box-shadow: 0 2px 6px rgba(0,0,0,0.15);
             color: var(--text); pointer-events: none;
           }
-          .legend-title { font-weight: 600; margin-bottom: 10px; font-size: 12px; color: var(--text); }
-          .legend-hint {
-            font-size: 10px; color: var(--text-secondary); margin-bottom: 8px;
-            font-family: sans-serif; line-height: 1.4;
+          .legend-title {
+            font-weight: 600; margin-bottom: 6px; font-size: 10px;
+            text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary);
           }
           .legend-row {
-            display: flex; align-items: center; height: 24px; gap: 8px; margin-bottom: 6px;
+            display: flex; align-items: center; height: 18px; gap: 6px; margin-bottom: 4px;
           }
           .legend-row:last-child { margin-bottom: 0; }
           .viridis-bar {
-            width: 60px; height: 10px; min-width: 60px; border-radius: 4px;
+            width: 28px; height: 8px; min-width: 28px; border-radius: 3px;
             background: linear-gradient(to right, #440154, #31688E, #35B779, #90D743, #FDE725);
           }
           .legend-size-icon,
           .legend-ring-icon {
-            width: 36px; min-width: 36px; display: flex; align-items: center; justify-content: center;
+            width: 26px; min-width: 26px; display: flex; align-items: center; justify-content: center;
           }
-          .legend-text { font-size: 11px; color: var(--text); white-space: nowrap; }
+          .legend-key { font-size: 10px; font-weight: 600; color: var(--text); min-width: 42px; white-space: nowrap; }
+          .legend-desc { font-size: 10px; color: var(--text-secondary); white-space: nowrap; }
+
+          #hint {
+            position: absolute; bottom: 10px; left: 12px;
+            font-family: sans-serif; font-size: 10px; color: var(--text-secondary);
+            opacity: 0.65; pointer-events: none; z-index: 10;
+          }
 
           .node-label { font: 10px sans-serif; pointer-events: none; text-anchor: middle; fill: var(--text); }
           .selected-node { stroke: var(--bar-fan-in) !important; stroke-width: 4px !important; }
@@ -161,33 +167,33 @@ public class GraphHtmlPanel extends JPanel {
           <div id="chart-container">
             <div id="legend">
               <div class="legend-title">Legenda</div>
-              <div class="legend-hint">Clique num pacote para dar zoom · clique numa classe para ver detalhes · clique fora para voltar</div>
               <div class="legend-row">
                 <div class="viridis-bar"></div>
-                <span class="legend-text">Cor: fan-out (baixo → alto)</span>
+                <span class="legend-key">Cor</span><span class="legend-desc">Fan-out</span>
               </div>
               <div class="legend-row">
                 <div class="legend-size-icon">
-                  <svg width="36" height="16" viewBox="0 0 36 16">
-                    <circle cx="6"  cy="8" r="4" fill="#35B779"/>
-                    <circle cx="26" cy="8" r="7" fill="#35B779"/>
+                  <svg width="26" height="14" viewBox="0 0 26 14">
+                    <circle cx="5"  cy="7" r="3" fill="#35B779"/>
+                    <circle cx="19" cy="7" r="5.5" fill="#35B779"/>
                   </svg>
                 </div>
-                <span class="legend-text">Tamanho: LOC</span>
+                <span class="legend-key">Tamanho</span><span class="legend-desc">LOC</span>
               </div>
               <div class="legend-row">
                 <div class="legend-ring-icon">
-                  <svg width="22" height="22" viewBox="0 0 22 22">
-                    <circle cx="11" cy="11" r="6" fill="#35B779"/>
-                    <circle cx="11" cy="11" r="9" fill="none"
-                            stroke="#FF6B00" stroke-width="2.5"
-                            stroke-dasharray="35 57" stroke-linecap="round"
-                            transform="rotate(-90 11 11)"/>
+                  <svg width="18" height="18" viewBox="0 0 18 18">
+                    <circle cx="9" cy="9" r="4.5" fill="#35B779"/>
+                    <circle cx="9" cy="9" r="7" fill="none"
+                            stroke="#FF6B00" stroke-width="2"
+                            stroke-dasharray="28 44" stroke-linecap="round"
+                            transform="rotate(-90 9 9)"/>
                   </svg>
                 </div>
-                <span class="legend-text">Anel: fan-in</span>
+                <span class="legend-key">Anel</span><span class="legend-desc">Fan-in</span>
               </div>
             </div>
+            <div id="hint">Clique num pacote para zoom · clique numa classe para detalhes · clique fora para voltar</div>
             <svg id="chart"></svg>
           </div>
           <div id="resizer"></div>
