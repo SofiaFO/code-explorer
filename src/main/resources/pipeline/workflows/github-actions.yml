@@ -1,0 +1,68 @@
+# Equivalente ao bitbucket-pipelines.yml para GitHub Actions: gera o mesmo
+# snapshot visual (PNG + PDF) do circle packing via o extrator headless
+# (JavaParser) + screenshot.js (Puppeteer), a cada push ou pull request.
+#
+# Diferente do Bitbucket, aqui não instalamos Chromium via apt (o pacote
+# chromium-browser não é mais instalável de forma confiável via apt nos
+# runners ubuntu-latest atuais) — deixamos o Puppeteer baixar seu próprio
+# Chromium durante o `npm install`.
+
+name: CodeExplorer — Visual Snapshot
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  snapshot:
+    name: Gerar snapshot visual
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: headless
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: headless/pom.xml
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: headless/package-lock.json
+
+      - name: Build do extrator standalone
+        run: mvn package -q -f pom.xml
+
+      - name: Extrair relações e gerar JSON
+        run: java -jar target/extractor-cli.jar ../src/main/java output/graph.json
+
+      - name: Instalar dependências Node
+        run: npm install
+
+      - name: Gerar screenshot
+        run: |
+          COMMIT=$(echo "${{ github.sha }}" | cut -c1-8)
+          DATE=$(date +%Y-%m-%d)
+          node screenshot.js output/graph.json "$COMMIT" "$DATE"
+          echo "Artefatos gerados:"
+          ls -lh output/
+
+      - name: Salvar artefatos
+        uses: actions/upload-artifact@v7
+        with:
+          name: codeexplorer-snapshot-${{ github.sha }}
+          path: |
+            headless/output/*.png
+            headless/output/*.pdf
+          retention-days: 90

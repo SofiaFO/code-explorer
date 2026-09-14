@@ -17,6 +17,9 @@
                 secondary="false"
                 anchor="right"
                 factoryClass="com.sofia.codeexplorer.ui.CodeExplorerToolWindowFactory"/>
+        <notificationGroup
+                id="CodeExplorer"
+                displayType="BALLOON"/>
     </extensions>
 
     <actions>
@@ -25,6 +28,14 @@
                 class="com.sofia.codeexplorer.actions.AnalyzeProjectAction"
                 text="Analyze Project Dependencies">
             <add-to-group group-id="AnalyzeMenu" anchor="last"/>
+        </action>
+
+        <action
+                id="com.sofia.codeexplorer.SetupPipelineAction"
+                class="com.sofia.codeexplorer.actions.SetupPipelineAction"
+                text="Configurar Pipeline de Snapshots"
+                description="Configura geração automática de snapshots visuais a cada Pull Request">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
     </actions>
 </idea-plugin>

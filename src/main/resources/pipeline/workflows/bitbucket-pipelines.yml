@@ -1,0 +1,40 @@
+image: atlassian/default-image:4
+
+definitions:
+  steps:
+    - step: &visual-snapshot
+        name: CodeExplorer — Visual Snapshot
+        caches:
+          - maven
+          - node
+        script:
+          # 1. Build do extrator standalone
+          - cd headless
+          - mvn package -q -f pom.xml
+
+          # 2. Extrai relações e gera JSON
+          - java -jar target/extractor-cli.jar ../src/main/java output/graph.json
+
+          # 3. Chrome para o Puppeteer + dependências Node
+          - apt-get update && apt-get install -y chromium --no-install-recommends
+          - export PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+          - npm install
+
+          # 4. Tira o screenshot
+          - COMMIT=$(echo $BITBUCKET_COMMIT | cut -c1-8)
+          - DATE=$(date +%Y-%m-%d)
+          - node screenshot.js output/graph.json $COMMIT $DATE
+
+          # 5. Lista os artefatos gerados
+          - ls -lh output/
+        artifacts:
+          - headless/output/*.png
+          - headless/output/*.pdf
+
+pipelines:
+  default:
+    - step: *visual-snapshot
+
+  pull-requests:
+    '**':
+      - step: *visual-snapshot

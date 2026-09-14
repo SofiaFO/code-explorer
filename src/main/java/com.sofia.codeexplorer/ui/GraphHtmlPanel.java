@@ -2,6 +2,7 @@ package com.sofia.codeexplorer.ui;
 
 import com.intellij.ui.jcef.JBCefApp;
 import com.intellij.ui.jcef.JCEFHtmlPanel;
+import com.intellij.util.ui.StartupUiUtil;
 
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -14,6 +15,7 @@ import java.awt.BorderLayout;
 public class GraphHtmlPanel extends JPanel {
 
     private static final String PLACEHOLDER = "__GRAPH_DATA_JSON__";
+    private static final String THEME_PLACEHOLDER = "__THEME__";
 
     private final JCEFHtmlPanel browser;
     private final JLabel fallbackLabel;
@@ -38,7 +40,13 @@ public class GraphHtmlPanel extends JPanel {
             fallbackLabel.setText("Análise concluída, mas o grafo não pode ser exibido (JCEF indisponível).");
             return;
         }
-        browser.setHtml(HTML_TEMPLATE.replace(PLACEHOLDER, json));
+        // Tema é lido no momento do render — reabrir o painel reaplica caso o
+        // usuário tenha trocado o tema do IntelliJ nesse meio tempo.
+        String theme = StartupUiUtil.INSTANCE.isDarkTheme() ? "dark" : "light";
+        String html = HTML_TEMPLATE
+            .replace(THEME_PLACEHOLDER, theme)
+            .replace(PLACEHOLDER, json);
+        browser.setHtml(html);
     }
 
     public void dispose() {
@@ -52,59 +60,132 @@ public class GraphHtmlPanel extends JPanel {
         <meta charset="utf-8">
         <script src="https://d3js.org/d3.v7.min.js"></script>
         <style>
-          html, body { margin: 0; height: 100%; overflow: hidden; font-family: sans-serif; }
+          html, body {
+            margin: 0; height: 100%; overflow: hidden; font-family: sans-serif;
+            background: var(--bg); color: var(--text);
+          }
           #app { display: flex; width: 100vw; height: 100vh; }
-          #chart-container { flex: 1 1 auto; position: relative; background: #fafafa; min-width: 0; }
+          #chart-container { flex: 1 1 auto; position: relative; background: var(--bg); min-width: 0; }
           svg { width: 100%; height: 100%; display: block; }
-          #resizer { flex: 0 0 6px; cursor: col-resize; background: #ddd; }
-          #resizer:hover, #resizer.dragging { background: #90a4ae; }
+          #resizer { flex: 0 0 6px; cursor: col-resize; background: var(--divider); }
+          #resizer:hover, #resizer.dragging { background: var(--bar-fan-in); }
           #sidebar {
-            flex: 0 0 260px; background: #f5f5f5; border-left: 1px solid #ccc;
-            overflow-y: auto; padding: 12px; box-sizing: border-box; font-size: 13px; color: #333;
+            flex: 0 0 260px; background: var(--panel);
+            border-left: 1px solid var(--panel-border);
+            box-shadow: -2px 0 8px rgba(0,0,0,0.08);
+            overflow-y: auto; padding: 0; box-sizing: border-box; font-size: 13px; color: var(--text);
             word-break: break-word;
           }
           #sidebar h3 { margin: 0 0 8px; font-size: 15px; }
-          #sidebar .qname { color: #777; font-size: 11px; word-break: break-all; margin-bottom: 10px; }
+          #sidebar .qname { color: var(--text-secondary); font-size: 11px; word-break: break-all; margin-bottom: 10px; }
           #sidebar .stat-line { margin: 3px 0; }
-          #sidebar .stat-line b { color: #000; }
+          #sidebar .stat-line b { color: var(--text); }
           #sidebar ul { margin: 4px 0 10px; padding-left: 18px; }
           #sidebar li { margin: 2px 0; }
           .metric-row { display: flex; align-items: center; gap: 6px; margin: 6px 0; font-size: 12px; }
-          .metric-label { color: #666; min-width: 55px; }
-          .metric-value { font-weight: 500; min-width: 28px; text-align: right; }
-          .metric-bar-bg { flex: 1; height: 6px; background: #e0e0e0; border-radius: 3px; }
-          .metric-bar-fill { height: 6px; border-radius: 3px; }
-          .metric-max { color: #999; font-size: 11px; min-width: 50px; }
-          .rel-count { color: #999; font-size: 11px; }
-          #legend {
-            position: absolute; top: 8px; left: 8px; font-size: 12px; color: #444;
-            background: rgba(255,255,255,0.9); padding: 6px 10px; border-radius: 4px;
-            pointer-events: none; line-height: 1.6;
+          .metric-label { color: var(--text-secondary); min-width: 55px; }
+          .metric-value {
+            font-weight: 500; min-width: 28px; text-align: right;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
           }
-          #legend .hint { margin-bottom: 4px; }
-          #legend .encoding { margin-bottom: 2px; font-weight: bold; }
-          #legend .swatches { margin-bottom: 4px; }
-          #legend .swatches span { display: inline-flex; align-items: center; margin-right: 10px; }
-          #legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
-          #legend i.ring-sample { background: #fff; border: 3px solid #FF6B00; }
-          #legend .viridis-gradient {
-            width: 160px; height: 10px; border-radius: 3px; margin: 2px 0 4px;
+          .metric-bar-bg { flex: 1; height: 6px; background: var(--bar-bg); border-radius: 3px; }
+          .metric-bar-fill { height: 6px; border-radius: 3px; }
+          .metric-max { color: var(--text-secondary); font-size: 11px; min-width: 50px; }
+          .rel-count { color: var(--text-secondary); font-size: 11px; }
+
+          .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px; }
+          .summary-card {
+            background: var(--package-fill); border: 1px solid var(--panel-border);
+            border-radius: 8px; padding: 12px 8px; text-align: center;
+          }
+          .summary-number {
+            font-size: 28px; font-weight: 700; color: var(--bar-fan-in);
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+          }
+          .summary-label { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+          .highlight-danger .summary-number { color: var(--cycle-line); }
+
+          .class-header {
+            background: var(--package-fill); border-bottom: 2px solid var(--bar-fan-in);
+            padding: 12px 16px; display: flex; justify-content: space-between; align-items: center;
+          }
+          .class-name {
+            font-size: 18px; font-weight: 700; color: var(--text);
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+          }
+          .class-type-badge {
+            font-size: 10px; font-weight: 600; color: var(--button-text); background: var(--bar-fan-in);
+            padding: 2px 8px; border-radius: 10px; letter-spacing: 0.5px; white-space: nowrap;
+          }
+          .class-body { padding: 12px 16px; }
+
+          .section-divider { height: 1px; background: var(--divider); margin: 10px 0; }
+          .section-title {
+            font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px;
+            color: var(--text-secondary); margin-bottom: 6px;
+          }
+
+          #legend {
+            position: absolute; top: 12px; left: 12px;
+            background: var(--legend-bg); border: 1px solid var(--legend-border);
+            border-radius: 8px; padding: 10px 14px;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            z-index: 10; min-width: 210px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            color: var(--text); pointer-events: none;
+          }
+          .legend-title { font-weight: 600; margin-bottom: 10px; font-size: 12px; color: var(--text); }
+          .legend-hint {
+            font-size: 10px; color: var(--text-secondary); margin-bottom: 8px;
+            font-family: sans-serif; line-height: 1.4;
+          }
+          .legend-row {
+            display: flex; align-items: center; height: 24px; gap: 8px; margin-bottom: 6px;
+          }
+          .legend-row:last-child { margin-bottom: 0; }
+          .viridis-bar {
+            width: 60px; height: 10px; min-width: 60px; border-radius: 4px;
             background: linear-gradient(to right, #440154, #31688E, #35B779, #90D743, #FDE725);
           }
-          .node-label { font: 10px sans-serif; pointer-events: none; text-anchor: middle; }
-          .selected-node { stroke: #1565C0 !important; stroke-width: 4px !important; }
+          .legend-size-icon,
+          .legend-ring-icon {
+            width: 36px; min-width: 36px; display: flex; align-items: center; justify-content: center;
+          }
+          .legend-text { font-size: 11px; color: var(--text); white-space: nowrap; }
+
+          .node-label { font: 10px sans-serif; pointer-events: none; text-anchor: middle; fill: var(--text); }
+          .selected-node { stroke: var(--bar-fan-in) !important; stroke-width: 4px !important; }
         </style>
         </head>
         <body>
         <div id="app">
           <div id="chart-container">
             <div id="legend">
-              <div class="hint">Clique num pacote para dar zoom · clique numa classe para ver detalhes · clique fora para voltar</div>
-              <div class="encoding">Cor — fan-out (roxo = baixo · amarelo = alto)</div>
-              <div class="viridis-gradient"></div>
-              <div class="encoding">Tamanho — linhas de código (LOC)</div>
-              <div class="swatches">
-                <span><i class="ring-sample"></i>Fan-in (anel = proporção do máximo)</span>
+              <div class="legend-title">Legenda</div>
+              <div class="legend-hint">Clique num pacote para dar zoom · clique numa classe para ver detalhes · clique fora para voltar</div>
+              <div class="legend-row">
+                <div class="viridis-bar"></div>
+                <span class="legend-text">Cor: fan-out (baixo → alto)</span>
+              </div>
+              <div class="legend-row">
+                <div class="legend-size-icon">
+                  <svg width="36" height="16" viewBox="0 0 36 16">
+                    <circle cx="6"  cy="8" r="4" fill="#35B779"/>
+                    <circle cx="26" cy="8" r="7" fill="#35B779"/>
+                  </svg>
+                </div>
+                <span class="legend-text">Tamanho: LOC</span>
+              </div>
+              <div class="legend-row">
+                <div class="legend-ring-icon">
+                  <svg width="22" height="22" viewBox="0 0 22 22">
+                    <circle cx="11" cy="11" r="6" fill="#35B779"/>
+                    <circle cx="11" cy="11" r="9" fill="none"
+                            stroke="#FF6B00" stroke-width="2.5"
+                            stroke-dasharray="35 57" stroke-linecap="round"
+                            transform="rotate(-90 11 11)"/>
+                  </svg>
+                </div>
+                <span class="legend-text">Anel: fan-in</span>
               </div>
             </div>
             <svg id="chart"></svg>
@@ -113,7 +194,60 @@ public class GraphHtmlPanel extends JPanel {
           <div id="sidebar"></div>
         </div>
         <script>
+          const THEME = '__THEME__';
           const GRAPH_DATA = __GRAPH_DATA_JSON__;
+
+          // Paleta de tokens de tema; a paleta Viridis dos círculos de classe
+          // e o anel de fan-in (laranja) não dependem do tema, ficam fixos.
+          const T = {
+            dark: {
+              bg:            '#2B2D30',
+              packageFill:   '#3C3F41',
+              packageStroke: '#6B6B6B',
+              text:          '#BCBEC4',
+              textSecondary: '#888A8C',
+              panel:         '#1E1F22',
+              panelBorder:   '#3C3F41',
+              legendBg:      '#2B2D30',
+              legendBorder:  '#3C3F41',
+              barBg:         '#3C3F41',
+              barFanIn:      '#4A9EFF',
+              barFanOut:     '#FF8C42',
+              headerBg:      '#1E1F22',
+              headerBorder:  '#3C3F41',
+              buttonBg:      '#4A9EFF',
+              buttonText:    '#FFFFFF',
+              divider:       '#3C3F41',
+              cycleLine:     '#FF5555',
+            },
+            light: {
+              bg:            '#FAFAFA',
+              packageFill:   '#F0F2F4',
+              packageStroke: '#AAAAAA',
+              text:          '#1A1A1A',
+              textSecondary: '#666666',
+              panel:         '#F7F7F7',
+              panelBorder:   '#DDDDDD',
+              legendBg:      '#FFFFFF',
+              legendBorder:  '#DDDDDD',
+              barBg:         '#E0E0E0',
+              barFanIn:      '#1565C0',
+              barFanOut:     '#E65100',
+              headerBg:      '#F0F2F4',
+              headerBorder:  '#DDDDDD',
+              buttonBg:      '#1565C0',
+              buttonText:    '#FFFFFF',
+              divider:       '#DDDDDD',
+              cycleLine:     '#E53935',
+            }
+          }[THEME];
+
+          (function applyTheme() {
+            const rootStyle = document.documentElement.style;
+            for (const [key, value] of Object.entries(T)) {
+              rootStyle.setProperty('--' + key.replace(/[A-Z]/g, c => '-' + c.toLowerCase()), value);
+            }
+          })();
         </script>
         <script>
         (function () {
@@ -149,11 +283,12 @@ public class GraphHtmlPanel extends JPanel {
             });
           })();
 
-          // Cor de pacote: única, quase branca, independente da profundidade.
-          // Serve só de "container" neutro — as cores fortes ficam reservadas
-          // pras classes (fan-out), que são a informação real. A separação
-          // entre pacotes aninhados vem da borda (stroke), não do preenchimento.
-          const PACKAGE_COLOR = "#FAFAFA";
+          // Cor de pacote: única, quase neutra, independente da profundidade.
+          // Serve só de "container" — as cores fortes ficam reservadas pras
+          // classes (fan-out), que são a informação real. A separação entre
+          // pacotes aninhados vem da borda (stroke), não do preenchimento.
+          const PACKAGE_FILL = T.packageFill;
+          const PACKAGE_STROKE = T.packageStroke;
 
           // Fill das classes = fan-out normalizado pelo máximo do projeto,
           // via escala contínua Viridis — sem limiares arbitrários de
@@ -228,12 +363,12 @@ public class GraphHtmlPanel extends JPanel {
             .join("g");
 
           const node = nodeGroup.append("circle")
-              .attr("fill", d => d.children ? PACKAGE_COLOR : colorScale(d.data.fanOut))
+              .attr("fill", d => d.children ? PACKAGE_FILL : colorScale(d.data.fanOut))
               .attr("fill-opacity", d => d.children ? 0.85 : 0.9)
               // Borda das folhas = a própria cor do fill escurecida — sempre
               // visível em qualquer ponto da escala Viridis, garante contraste
               // mesmo pra círculos minúsculos que sumiriam sem contorno.
-              .attr("stroke", d => d.children ? "#37474f" : d3.color(colorScale(d.data.fanOut)).darker(1.5))
+              .attr("stroke", d => d.children ? PACKAGE_STROKE : d3.color(colorScale(d.data.fanOut)).darker(1.5))
               .attr("stroke-width", 1)
               .attr("stroke-opacity", d => d.children ? 0.6 : 1)
               .on("mouseover", function () { d3.select(this).attr("stroke-opacity", 1); })
@@ -323,14 +458,31 @@ public class GraphHtmlPanel extends JPanel {
           function summaryPanelHtml() {
             const leaves = root.leaves();
             const packages = root.descendants().filter(d => d.children && d !== root).length;
+            const cycles = (data.cycles || []).length;
 
             return `
-              <h3>Resumo do projeto</h3>
-              <div class="stat-line">Classes: <b>${leaves.length}</b></div>
-              <div class="stat-line">Pacotes: <b>${packages}</b></div>
-              <div class="stat-line">Ciclos: <b>${(data.cycles || []).length}</b></div>
-              <div class="stat-line" style="margin-top:6px;">Fan-out máximo (cor): <b>${GRAPH_DATA.maxFanOut || 0}</b></div>
-              <div class="stat-line">Fan-in máximo (anel): <b>${GRAPH_DATA.maxFanIn || 0}</b></div>
+              <div class="summary-grid">
+                <div class="summary-card">
+                  <div class="summary-number">${leaves.length}</div>
+                  <div class="summary-label">Classes</div>
+                </div>
+                <div class="summary-card">
+                  <div class="summary-number">${packages}</div>
+                  <div class="summary-label">Pacotes</div>
+                </div>
+                <div class="summary-card${cycles > 0 ? " highlight-danger" : ""}">
+                  <div class="summary-number">${cycles}</div>
+                  <div class="summary-label">Ciclos</div>
+                </div>
+                <div class="summary-card">
+                  <div class="summary-number">${GRAPH_DATA.maxFanOut || 0}</div>
+                  <div class="summary-label">Fan-out máx.</div>
+                </div>
+                <div class="summary-card">
+                  <div class="summary-number">${GRAPH_DATA.maxFanIn || 0}</div>
+                  <div class="summary-label">Fan-in máx.</div>
+                </div>
+              </div>
             `;
           }
 
@@ -375,28 +527,34 @@ public class GraphHtmlPanel extends JPanel {
             const fanOutPct = maxFanOut > 0 ? (cls.fanOut / maxFanOut) * 100 : 0;
 
             return `
-              <h3>${cls.name}</h3>
-              <div class="qname">${qName}</div>
-              <div class="stat-line">Tipo: <b>${TYPE_LABELS[cls.type] || cls.type}</b></div>
-              <div class="stat-line">Pacote: <b>${pkg}</b></div>
-              <div class="stat-line">Linhas de código (tamanho): <b>${cls.loc}</b></div>
-              <div class="metric-row">
-                <span class="metric-label">Fan-in</span>
-                <span class="metric-value">${cls.fanIn}</span>
-                <div class="metric-bar-bg"><div class="metric-bar-fill" style="width: ${fanInPct}%; background: #1565C0;"></div></div>
-                <span class="metric-max">máx: ${maxFanIn}</span>
+              <div class="class-header">
+                <div class="class-name">${cls.name}</div>
+                <div class="class-type-badge">${(TYPE_LABELS[cls.type] || cls.type).toUpperCase()}</div>
               </div>
-              <div class="metric-row">
-                <span class="metric-label">Fan-out (cor)</span>
-                <span class="metric-value">${cls.fanOut}</span>
-                <div class="metric-bar-bg"><div class="metric-bar-fill" style="width: ${fanOutPct}%; background: #E65100;"></div></div>
-                <span class="metric-max">máx: ${maxFanOut}</span>
+              <div class="class-body">
+                <div class="qname">${qName}</div>
+                <div class="stat-line">Pacote: <b>${pkg}</b></div>
+                <div class="stat-line">Linhas de código (tamanho): <b>${cls.loc}</b></div>
+                <div class="metric-row">
+                  <span class="metric-label">Fan-in</span>
+                  <span class="metric-value">${cls.fanIn}</span>
+                  <div class="metric-bar-bg"><div class="metric-bar-fill" style="width: ${fanInPct}%; background: var(--bar-fan-in);"></div></div>
+                  <span class="metric-max">máx: ${maxFanIn}</span>
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">Fan-out (cor)</span>
+                  <span class="metric-value">${cls.fanOut}</span>
+                  <div class="metric-bar-bg"><div class="metric-bar-fill" style="width: ${fanOutPct}%; background: var(--bar-fan-out);"></div></div>
+                  <span class="metric-max">máx: ${maxFanOut}</span>
+                </div>
+                <div class="stat-line">CBO: <b>${cls.cbo}</b></div>
+                <div class="section-divider"></div>
+                <div class="section-title">Usa</div>
+                <ul>${uses}</ul>
+                <div class="section-divider"></div>
+                <div class="section-title">Usado por</div>
+                <ul>${usedBy}</ul>
               </div>
-              <div class="stat-line">CBO: <b>${cls.cbo}</b></div>
-              <div class="stat-line" style="margin-top:8px;"><b>Usa:</b></div>
-              <ul>${uses}</ul>
-              <div class="stat-line"><b>Usado por:</b></div>
-              <ul>${usedBy}</ul>
             `;
           }
         })();
