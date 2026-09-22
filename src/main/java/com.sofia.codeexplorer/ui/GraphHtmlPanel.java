@@ -1,5 +1,6 @@
 package com.sofia.codeexplorer.ui;
 
+import com.intellij.ide.BrowserUtil;
 import com.intellij.ui.jcef.JBCefApp;
 import com.intellij.ui.jcef.JCEFHtmlPanel;
 import com.intellij.util.ui.StartupUiUtil;
@@ -8,6 +9,10 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingConstants;
 import java.awt.BorderLayout;
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 
 // Painel que mostra o circle packing (com painel lateral de detalhes) via D3
 // num navegador embutido (JCEF). Se o ambiente não suportar JCEF, cai para
@@ -22,31 +27,58 @@ public class GraphHtmlPanel extends JPanel {
 
     public GraphHtmlPanel() {
         super(new BorderLayout());
-        if (JBCefApp.isSupported()) {
+        if (isJcefSupported()) {
             browser = new JCEFHtmlPanel("about:blank");
             fallbackLabel = null;
             add(browser.getComponent(), BorderLayout.CENTER);
         } else {
             browser = null;
             fallbackLabel = new JLabel(
-                "JCEF não está disponível neste ambiente — não é possível exibir o grafo.",
+                "JCEF não está disponível neste ambiente — o grafo será aberto no navegador padrão do sistema.",
                 SwingConstants.CENTER);
             add(fallbackLabel, BorderLayout.CENTER);
         }
     }
 
-    public void updateGraph(String json) {
-        if (browser == null) {
-            fallbackLabel.setText("Análise concluída, mas o grafo não pode ser exibido (JCEF indisponível).");
-            return;
+    // JBCefApp.isSupported() já cobre "JCEF existe mas está desabilitado",
+    // mas em ambientes sem JCEF no runtime da IDE (ex.: builds via snap sem
+    // o JBR completo) a própria classe não existe, e a chamada estoura
+    // NoClassDefFoundError em vez de retornar false. Capturamos Throwable
+    // aqui pra sempre cair no fallback em vez de derrubar a ToolWindow.
+    private static boolean isJcefSupported() {
+        try {
+            return JBCefApp.isSupported();
+        } catch (Throwable t) {
+            return false;
         }
+    }
+
+    public void updateGraph(String json) {
         // Tema é lido no momento do render — reabrir o painel reaplica caso o
         // usuário tenha trocado o tema do IntelliJ nesse meio tempo.
         String theme = StartupUiUtil.INSTANCE.isDarkTheme() ? "dark" : "light";
         String html = HTML_TEMPLATE
             .replace(THEME_PLACEHOLDER, theme)
             .replace(PLACEHOLDER, json);
-        browser.setHtml(html);
+
+        if (browser != null) {
+            browser.setHtml(html);
+            return;
+        }
+
+        // Sem JCEF, não há navegador embutido pra usar — abrimos o mesmo
+        // HTML no navegador padrão do sistema em vez de deixar o grafo
+        // indisponível. Funciona em qualquer máquina com um navegador
+        // instalado, independente do runtime da IDE ter JCEF ou não.
+        try {
+            File file = File.createTempFile("code-explorer-graph-", ".html");
+            file.deleteOnExit();
+            Files.writeString(file.toPath(), html, StandardCharsets.UTF_8);
+            fallbackLabel.setText("Grafo aberto no navegador padrão do sistema.");
+            BrowserUtil.browse(file);
+        } catch (IOException e) {
+            fallbackLabel.setText("Não foi possível abrir o grafo: " + e.getMessage());
+        }
     }
 
     public void dispose() {
