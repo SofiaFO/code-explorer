@@ -128,7 +128,8 @@ public class HierarchyJsonBuilder {
             sb.append(pad).append("  \"loc\": ").append(n.getLoc()).append(",\n");
             sb.append(pad).append("  \"fanIn\": ").append(n.getFanIn()).append(",\n");
             sb.append(pad).append("  \"fanOut\": ").append(n.getFanOut()).append(",\n");
-            sb.append(pad).append("  \"cbo\": ").append(n.getCbo()).append("\n");
+            sb.append(pad).append("  \"cbo\": ").append(n.getCbo()).append(",\n");
+            sb.append(pad).append("  \"dit\": ").append(n.getDit()).append("\n");
             sb.append(pad).append('}');
             written++;
             sb.append(written < total ? "," : "").append('\n');

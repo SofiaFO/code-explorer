@@ -1,6 +1,7 @@
 package com.sofia.codeexplorer.analyzer;
 
 import com.intellij.ide.highlighter.JavaFileType;
+import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
@@ -10,6 +11,7 @@ import com.sofia.codeexplorer.model.ClassNode;
 import com.sofia.codeexplorer.model.DependencyEdge;
 import com.sofia.codeexplorer.model.EdgeType;
 import com.sofia.codeexplorer.model.NodeType;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -17,16 +19,24 @@ import java.util.stream.Collectors;
 public class ClassRelationExtractor {
 
     private final Project project;
+    private final Module module;
 
     public ClassRelationExtractor(Project project) {
+        this(project, null);
+    }
+
+    public ClassRelationExtractor(Project project, @Nullable Module module) {
         this.project = project;
+        this.module = module;
     }
 
     public ExtractionResult extract() {
         Map<String, ClassNode> nodes = new LinkedHashMap<>();
         List<DependencyEdge>   edges = new ArrayList<>();
 
-        GlobalSearchScope scope      = GlobalSearchScope.projectScope(project);
+        GlobalSearchScope scope      = module != null
+                ? GlobalSearchScope.moduleScope(module)
+                : GlobalSearchScope.projectScope(project);
         PsiManager        psiManager = PsiManager.getInstance(project);
 
         for (VirtualFile vf : FileTypeIndex.getFiles(JavaFileType.INSTANCE, scope)) {
@@ -109,13 +119,13 @@ public class ClassRelationExtractor {
         PsiClass superClass = psiClass.getSuperClass();
         if (superClass != null && superClass.getQualifiedName() != null
                 && !superClass.getQualifiedName().equals("java.lang.Object")) {
-            edges.add(new DependencyEdge(qualifiedName, superClass.getQualifiedName(), EdgeType.EXTENDS));
+            addEdge(edges, qualifiedName, superClass.getQualifiedName(), EdgeType.EXTENDS);
         }
 
         // 2. Interfaces implementadas
         for (PsiClass iface : psiClass.getInterfaces()) {
             if (iface.getQualifiedName() != null) {
-                edges.add(new DependencyEdge(qualifiedName, iface.getQualifiedName(), EdgeType.IMPLEMENTS));
+                addEdge(edges, qualifiedName, iface.getQualifiedName(), EdgeType.IMPLEMENTS);
             }
         }
 
@@ -124,7 +134,7 @@ public class ClassRelationExtractor {
             if (field.getType() instanceof PsiClassType) {
                 PsiClass fieldClass = ((PsiClassType) field.getType()).resolve();
                 if (fieldClass != null && fieldClass.getQualifiedName() != null) {
-                    edges.add(new DependencyEdge(qualifiedName, fieldClass.getQualifiedName(), EdgeType.USES));
+                    addEdge(edges, qualifiedName, fieldClass.getQualifiedName(), EdgeType.USES);
                 }
             }
         }
@@ -137,7 +147,7 @@ public class ClassRelationExtractor {
                 if (param.getType() instanceof PsiClassType) {
                     PsiClass paramClass = ((PsiClassType) param.getType()).resolve();
                     if (paramClass != null && paramClass.getQualifiedName() != null) {
-                        edges.add(new DependencyEdge(qualifiedName, paramClass.getQualifiedName(), EdgeType.USES));
+                        addEdge(edges, qualifiedName, paramClass.getQualifiedName(), EdgeType.USES);
                     }
                 }
             }
@@ -147,7 +157,7 @@ public class ClassRelationExtractor {
             if (returnType instanceof PsiClassType) {
                 PsiClass returnClass = ((PsiClassType) returnType).resolve();
                 if (returnClass != null && returnClass.getQualifiedName() != null) {
-                    edges.add(new DependencyEdge(qualifiedName, returnClass.getQualifiedName(), EdgeType.USES));
+                    addEdge(edges, qualifiedName, returnClass.getQualifiedName(), EdgeType.USES);
                 }
             }
 
@@ -162,7 +172,7 @@ public class ClassRelationExtractor {
                     if (resolved instanceof PsiClass) {
                         String targetName = ((PsiClass) resolved).getQualifiedName();
                         if (targetName != null) {
-                            edges.add(new DependencyEdge(qualifiedName, targetName, EdgeType.INSTANTIATES));
+                            addEdge(edges, qualifiedName, targetName, EdgeType.INSTANTIATES);
                         }
                     }
                 }
@@ -176,12 +186,20 @@ public class ClassRelationExtractor {
                     if (type instanceof PsiClassType) {
                         PsiClass calledClass = ((PsiClassType) type).resolve();
                         if (calledClass != null && calledClass.getQualifiedName() != null) {
-                            edges.add(new DependencyEdge(qualifiedName, calledClass.getQualifiedName(), EdgeType.CALLS));
+                            addEdge(edges, qualifiedName, calledClass.getQualifiedName(), EdgeType.CALLS);
                         }
                     }
                 }
             });
         }
+    }
+
+    // Ignora auto-arestas (source == target): factory methods e construtores
+    // estáticos que instanciam ou chamam a própria classe geram falsos
+    // positivos de "ciclo" de tamanho 1 se não forem filtrados aqui.
+    private static void addEdge(List<DependencyEdge> edges, String source, String target, EdgeType type) {
+        if (source.equals(target)) return;
+        edges.add(new DependencyEdge(source, target, type));
     }
 
     private void calculateMetrics(Map<String, ClassNode> nodes, List<DependencyEdge> edges) {

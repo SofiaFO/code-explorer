@@ -9,6 +9,12 @@ public class CycleDetector {
     public static List<List<String>> detect(List<DependencyEdge> edges) {
         Map<String, Set<String>> adj = new HashMap<>();
         for (DependencyEdge edge : edges) {
+            // Auto-arestas (source == target) não formam ciclo real e quebrariam
+            // a lógica de DFS abaixo (visited+inStack já conteriam o próprio nó
+            // na primeira iteração, gerando um "ciclo" de tamanho 1). Já são
+            // filtradas na origem em ClassRelationExtractor, mas filtrar de
+            // novo aqui mantém o detector correto por conta própria.
+            if (edge.getSource().equals(edge.getTarget())) continue;
             adj.computeIfAbsent(edge.getSource(), k -> new HashSet<>()).add(edge.getTarget());
         }
 

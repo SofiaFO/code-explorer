@@ -33,8 +33,11 @@ public class CycleDetectorTest {
     }
 
     @Test
-    public void selfLoop() {
-        assertEquals(1, CycleDetector.detect(List.of(e("A", "A"))).size());
+    public void selfLoopIsNotACycle() {
+        // Uma auto-aresta (ex.: factory method ou construtor estático que
+        // referencia a própria classe) não é um ciclo real e não deve ser
+        // reportada como um — evita falso positivo de "ciclo" de tamanho 1.
+        assertTrue(CycleDetector.detect(List.of(e("A", "A"))).isEmpty());
     }
 
     @Test

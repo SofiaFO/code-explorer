@@ -5,7 +5,15 @@
 # Diferente do Bitbucket, aqui não instalamos Chromium via apt (o pacote
 # chromium-browser não é mais instalável de forma confiável via apt nos
 # runners ubuntu-latest atuais) — deixamos o Puppeteer baixar seu próprio
-# Chromium durante o `npm install`.
+# Chromium durante o `npm install`. Esse download (~200MB) é o motivo do "Run
+# npm install" demorar minutos; as caches abaixo (via actions/cache, não via
+# a opção "cache" do setup-node) cobrem isso sem exigir que
+# headless/package-lock.json já exista — em projetos recém-instalados pelo
+# plugin, esse arquivo só nasce depois do primeiro `npm install` local, e a
+# opção "cache" do setup-node dá erro duro se apontar pra um arquivo
+# inexistente (diferente de actions/cache + hashFiles, que só não acha cache
+# e segue em frente). Usar npm install em vez de npm ci pelo mesmo motivo:
+# npm ci exige o lock file já existindo, e falharia nesse cenário.
 
 name: CodeExplorer — Visual Snapshot
 
@@ -38,14 +46,45 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: npm
-          cache-dependency-path: headless/package-lock.json
 
+      # Retry porque o Maven Central às vezes devolve 429 (Too Many Requests)
+      # sob carga — transitório, quase sempre passa numa segunda tentativa.
       - name: Build do extrator standalone
-        run: mvn package -q -f pom.xml
+        run: |
+          success=false
+          for i in 1 2 3; do
+            if mvn package -q -f pom.xml; then
+              success=true
+              break
+            fi
+            echo "Tentativa $i falhou (provável rate limit do Maven Central) — tentando de novo em 15s..."
+            sleep 15
+          done
+          if [ "$success" != "true" ]; then
+            echo "Falhou após 3 tentativas."
+            exit 1
+          fi
 
       - name: Extrair relações e gerar JSON
         run: java -jar target/extractor-cli.jar ../src/main/java output/graph.json
+
+      # Duas caches separadas: os pacotes npm (node_modules) e o binário do
+      # Chromium que o Puppeteer baixa no postinstall (fica em ~/.cache/
+      # puppeteer, fora de node_modules). hashFiles ignora arquivo ausente em
+      # vez de falhar, então funciona mesmo antes do primeiro
+      # package-lock.json existir — nesse caso a chave fica sem esse pedaço e
+      # todo push cai na mesma entrada de cache até o lock file aparecer.
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: headless/node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('headless/package.json', 'headless/package-lock.json') }}
+
+      - name: Cache Chromium do Puppeteer
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/puppeteer
+          key: ${{ runner.os }}-puppeteer-${{ hashFiles('headless/package.json', 'headless/package-lock.json') }}
 
       - name: Instalar dependências Node
         run: npm install
@@ -54,7 +93,8 @@ jobs:
         run: |
           COMMIT=$(echo "${{ github.sha }}" | cut -c1-8)
           DATE=$(date +%Y-%m-%d)
-          node screenshot.js output/graph.json "$COMMIT" "$DATE"
+          MODULE="${{ github.event.repository.name }}"
+          node screenshot.js output/graph.json "$COMMIT" "$DATE" "$MODULE"
           echo "Artefatos gerados:"
           ls -lh output/
 

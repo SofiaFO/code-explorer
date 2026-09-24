@@ -10,7 +10,23 @@ definitions:
         script:
           # 1. Build do extrator standalone
           - cd headless
-          - mvn package -q -f pom.xml
+          # Retry porque o Maven Central às vezes devolve 429 (Too Many
+          # Requests) sob carga — transitório, quase sempre passa numa
+          # segunda tentativa.
+          - |
+            success=false
+            for i in 1 2 3; do
+              if mvn package -q -f pom.xml; then
+                success=true
+                break
+              fi
+              echo "Tentativa $i falhou (provável rate limit do Maven Central) — tentando de novo em 15s..."
+              sleep 15
+            done
+            if [ "$success" != "true" ]; then
+              echo "Falhou após 3 tentativas."
+              exit 1
+            fi
 
           # 2. Extrai relações e gera JSON
           - java -jar target/extractor-cli.jar ../src/main/java output/graph.json
@@ -18,12 +34,20 @@ definitions:
           # 3. Chrome para o Puppeteer + dependências Node
           - apt-get update && apt-get install -y chromium --no-install-recommends
           - export PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+          # Já instalamos Chromium via apt e apontamos o Puppeteer pra ele
+          # acima — sem isso, o postinstall do Puppeteer baixa seu próprio
+          # Chromium (~200MB) também, dobrando o tempo de instalação à toa.
+          - export PUPPETEER_SKIP_DOWNLOAD=true
+          # npm install em vez de npm ci: npm ci exige headless/package-lock.
+          # json já existindo, e em projetos recém-instalados pelo plugin
+          # esse arquivo só nasce depois do primeiro `npm install` local.
           - npm install
 
           # 4. Tira o screenshot
           - COMMIT=$(echo $BITBUCKET_COMMIT | cut -c1-8)
           - DATE=$(date +%Y-%m-%d)
-          - node screenshot.js output/graph.json $COMMIT $DATE
+          - MODULE=$BITBUCKET_REPO_SLUG
+          - node screenshot.js output/graph.json $COMMIT $DATE $MODULE
 
           # 5. Lista os artefatos gerados
           - ls -lh output/
